@@ -4,12 +4,14 @@ import { ChefHat } from 'lucide-react'
 interface CompleteProfileProps {
   name: string
   surname: string
+  phone: string
+  lineId: string
   onComplete: (profile: { name: string; surname: string; phone: string; lineId: string }) => void
 }
 
-/** ขอชื่อจริง/นามสกุล/เบอร์โทร/Line ID ครั้งแรกหลัง login ด้วย Google — เผื่อกรณีบัญชี Google ไม่มีนามสกุลหรือชื่อไม่ตรงกับที่ใช้ติดต่อจริง */
-export default function CompleteProfile({ name, surname, onComplete }: CompleteProfileProps) {
-  const [form, setForm] = useState({ name, surname, phone: '', lineId: '' })
+/** ขอชื่อจริง/นามสกุล/เบอร์โทร/Line ID เมื่อโปรไฟล์ยังไม่ครบ — ทั้งครั้งแรกหลัง login ด้วย Google และครั้งถัดไปถ้ายังขาดข้อมูลอยู่ ดึงค่าที่มีอยู่แล้วมาเติมให้แก้ไขต่อ ไม่ต้องกรอกซ้ำ */
+export default function CompleteProfile({ name, surname, phone, lineId, onComplete }: CompleteProfileProps) {
+  const [form, setForm] = useState({ name, surname, phone, lineId })
 
   const handleSave = () => {
     if (!form.name.trim() || !form.surname.trim() || !form.phone) return
@@ -42,7 +44,11 @@ export default function CompleteProfile({ name, surname, onComplete }: CompleteP
                 type={type}
                 placeholder={placeholder}
                 value={form[key as keyof typeof form]}
-                onChange={(e) => setForm((f) => ({ ...f, [key]: e.target.value }))}
+                onChange={(e) => {
+                  const raw = e.target.value
+                  const value = key === 'phone' ? raw.replace(/\D/g, '').slice(0, 10) : raw
+                  setForm((f) => ({ ...f, [key]: value }))
+                }}
                 className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-transparent transition-all"
               />
             </div>

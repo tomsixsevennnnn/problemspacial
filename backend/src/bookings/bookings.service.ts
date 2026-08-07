@@ -7,8 +7,12 @@ import { UpdateBookingDto } from './dto/update-booking.dto'
 export class BookingsService {
   constructor(private prisma: PrismaService) {}
 
+  /** owner เห็นข้อมูลลูกค้าปัจจุบันจริง (ชื่อ/นามสกุล/อีเมล/Line ID) ผ่านความสัมพันธ์กับ User — ต่างจาก customerName/phone/lineId ที่ snapshot ไว้ตอนจอง */
   findAllForOwner() {
-    return this.prisma.booking.findMany({ orderBy: { createdAt: 'desc' } })
+    return this.prisma.booking.findMany({
+      orderBy: { createdAt: 'desc' },
+      include: { customer: { select: { name: true, surname: true, email: true, lineId: true } } },
+    })
   }
 
   findAllForCustomer(customerId: string) {

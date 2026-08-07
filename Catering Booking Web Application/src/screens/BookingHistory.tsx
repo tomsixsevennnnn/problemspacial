@@ -9,6 +9,7 @@ import { pickImageAsDataUrl } from '../imageUpload'
 interface BookingHistoryProps {
   navigate: (s: Screen) => void
   user: UserProfile | null
+  notifCount: number
   bookings: Booking[]
   onUpdateBooking: (id: string, patch: Partial<Booking>) => void
   settings: AppSettings
@@ -21,7 +22,7 @@ const STATUS_CONFIG = {
   cancelled: { label: 'ยกเลิก', bg: 'bg-red-100', text: 'text-red-600', dot: 'bg-red-400' },
 }
 
-export default function BookingHistory({ navigate, user, bookings, onUpdateBooking, settings }: BookingHistoryProps) {
+export default function BookingHistory({ navigate, user, notifCount, bookings, onUpdateBooking, settings }: BookingHistoryProps) {
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('all')
   const [detailId, setDetailId] = useState<string | null>(null)
@@ -86,7 +87,7 @@ export default function BookingHistory({ navigate, user, bookings, onUpdateBooki
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <Navbar navigate={navigate} currentScreen="history" user={user} />
+      <Navbar navigate={navigate} currentScreen="history" user={user} notifCount={notifCount} />
 
       <div className="pt-24 pb-12 max-w-6xl mx-auto px-4">
         <div className="mb-8">

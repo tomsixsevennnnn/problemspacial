@@ -20,6 +20,7 @@ import {
 interface SelectLocationProps {
   navigate: (s: Screen) => void
   user: UserProfile | null
+  notifCount: number
   tables: number
   location: EventLocation | null
   onSetLocation: (loc: EventLocation) => void
@@ -48,6 +49,7 @@ const DETAIL_FIELDS: { key: keyof LocationDetail; label: string; placeholder: st
 export default function SelectLocation({
   navigate,
   user,
+  notifCount,
   tables,
   location,
   onSetLocation,
@@ -216,7 +218,7 @@ export default function SelectLocation({
 
   return (
     <div className="h-screen flex flex-col bg-gray-50">
-      <Navbar navigate={navigate} currentScreen="select-location" user={user} />
+      <Navbar navigate={navigate} currentScreen="select-location" user={user} notifCount={notifCount} />
 
       {/* มือถือ: Navbar มีแถวเมนูล่างเพิ่ม จึงต้องเว้นบนมากกว่าจอใหญ่ */}
       <div className="pt-[7.25rem] md:pt-16 flex flex-col flex-1 overflow-hidden">

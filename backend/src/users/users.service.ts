@@ -22,11 +22,10 @@ export class UsersService {
    * จึงมักได้ชื่อ/อีเมลว่างตรงนี้ แต่ไม่เป็นไรเพราะ syncProfile (เรียกตอน login) จะอัปเดตให้ถูกอยู่แล้ว
    */
   async findOrCreate(profile: Auth0Profile) {
-    const existing = await this.prisma.user.findUnique({ where: { auth0Sub: profile.auth0Sub } })
-    if (existing) return existing
-
-    return this.prisma.user.create({
-      data: {
+    return this.prisma.user.upsert({
+      where: { auth0Sub: profile.auth0Sub },
+      update: {},
+      create: {
         auth0Sub: profile.auth0Sub,
         role: profile.role,
         name: profile.name,

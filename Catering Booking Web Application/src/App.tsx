@@ -19,6 +19,7 @@ import {
   DEFAULT_WAGE_SERVER_PER_TABLE,
 } from './costing'
 import { roleFromAuth0User } from './auth'
+import { unreadNotificationCount } from './notifications'
 import { api, type BackendUser, type CreatePackageInput, type UpdatePackageInput } from './api'
 import ErrorBanner from './components/ErrorBanner'
 import Login from './screens/Login'
@@ -216,8 +217,12 @@ export default function App() {
 
   /** เข้าเว็บด้วย role จาก Auth0 (customer = Google, owner = username/password) ดู src/auth.ts */
   const role = roleFromAuth0User(auth0User as Record<string, unknown> | undefined)
-  /** เบอร์โทร/Line ID เก็บที่ backend แล้ว (ผูกกับ Auth0 sub) — ยังไม่กรอก = phone ว่าง */
-  const needsProfile = isAuthenticated && role === 'customer' && backendUser !== null && !backendUser.phone
+  /** โปรไฟล์ยังไม่ครบ (ชื่อ/นามสกุล/เบอร์โทร) — เช็คทุกครั้งที่ login ไม่ใช่แค่ครั้งแรก เผื่อกรอกไม่ครบหรือ Google ไม่มีนามสกุลให้ */
+  const needsProfile =
+    isAuthenticated &&
+    role === 'customer' &&
+    backendUser !== null &&
+    (!backendUser.name || !backendUser.surname || !backendUser.phone)
 
   const user: UserProfile | null = backendUser
     ? {
@@ -246,6 +251,9 @@ export default function App() {
         ? 'owner-dashboard'
         : 'home'
       : screen
+
+  // จำนวนแจ้งเตือนใหม่ (ใบจองที่มีความเคลื่อนไหวภายใน 24 ชม.) — โชว์เป็นตัวเลขที่ไอคอนกระดิ่งบน Navbar
+  const notifCount = unreadNotificationCount(bookings)
 
   const handleSelectDateTime = (date: string, timeSlot: string) => {
     setBooking(b => ({ ...b, date, timeSlot }))
@@ -378,6 +386,8 @@ export default function App() {
         <CompleteProfile
           name={backendUser?.name || ''}
           surname={backendUser?.surname || ''}
+          phone={backendUser?.phone || ''}
+          lineId={backendUser?.lineId || ''}
           onComplete={(profile) =>
             runAction(async () => {
               const token = await withToken()
@@ -394,7 +404,12 @@ export default function App() {
   // Owner screens
   if (OWNER_SCREENS.includes(effectiveScreen)) {
     return (
-      <OwnerLayout navigate={navigate} currentScreen={effectiveScreen} user={user}>
+      <OwnerLayout
+        navigate={navigate}
+        currentScreen={effectiveScreen}
+        user={user}
+        bookings={bookings}
+      >
         {actionError && <ErrorBanner message={actionError} onDismiss={() => setActionError(null)} />}
         {effectiveScreen === 'owner-dashboard' && (
           <Dashboard bookings={bookings} menus={menus} settings={settings} />
@@ -455,12 +470,13 @@ export default function App() {
         </button>
       )}
       {effectiveScreen === 'home' && (
-        <Home navigate={navigate} user={user} />
+        <Home navigate={navigate} user={user} notifCount={notifCount} />
       )}
       {effectiveScreen === 'booking-calendar' && (
         <BookingCalendar
           navigate={navigate}
           user={user}
+          notifCount={notifCount}
           bookings={availability}
           onSelectDateTime={handleSelectDateTime}
         />
@@ -469,6 +485,7 @@ export default function App() {
         <SelectTable
           navigate={navigate}
           user={user}
+          notifCount={notifCount}
           tables={booking.tables}
           onSetTables={handleSetTables}
           date={booking.date}
@@ -481,6 +498,7 @@ export default function App() {
         <SelectLocation
           navigate={navigate}
           user={user}
+          notifCount={notifCount}
           tables={booking.tables}
           location={booking.location}
           onSetLocation={handleSetLocation}
@@ -494,6 +512,7 @@ export default function App() {
         <SelectPackage
           navigate={navigate}
           user={user}
+          notifCount={notifCount}
           packages={packages}
           tables={booking.tables}
           selectedPackageId={booking.packageId}
@@ -504,6 +523,7 @@ export default function App() {
         <SelectMenu
           navigate={navigate}
           user={user}
+          notifCount={notifCount}
           packages={packages}
           packageId={booking.packageId}
           selectedMenus={booking.selectedMenus}
@@ -514,6 +534,8 @@ export default function App() {
         <Cart
           navigate={navigate}
           user={user}
+          notifCount={notifCount}
+          isOwnerPreview={role === 'owner'}
           packages={packages}
           booking={booking}
           onConfirm={handleConfirm}
@@ -526,13 +548,14 @@ export default function App() {
         <BookingHistory
           navigate={navigate}
           user={user}
+          notifCount={notifCount}
           bookings={bookings}
           onUpdateBooking={handleUpdateBooking}
           settings={settings}
         />
       )}
       {effectiveScreen === 'notifications' && (
-        <Notifications navigate={navigate} user={user} />
+        <Notifications navigate={navigate} user={user} notifCount={notifCount} bookings={bookings} />
       )}
     </>
   )

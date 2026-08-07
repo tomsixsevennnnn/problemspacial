@@ -5,6 +5,7 @@ import type { Screen, UserProfile } from '../types'
 interface HomeProps {
   navigate: (s: Screen) => void
   user: UserProfile | null
+  notifCount: number
 }
 
 const STEPS = [
@@ -24,10 +25,10 @@ const GALLERY = [
   'https://images.unsplash.com/photo-1559339352-11d035aa65de?w=600&h=400&fit=crop&auto=format',
 ]
 
-export default function Home({ navigate, user }: HomeProps) {
+export default function Home({ navigate, user, notifCount }: HomeProps) {
   return (
     <div className="min-h-screen bg-gray-50">
-      <Navbar navigate={navigate} currentScreen="home" user={user} />
+      <Navbar navigate={navigate} currentScreen="home" user={user} notifCount={notifCount} />
 
       {/* Hero */}
       <section className="relative pt-16 overflow-hidden">

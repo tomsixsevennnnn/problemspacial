@@ -126,6 +126,8 @@ export interface StaffCalculation extends StaffPlan {
 export interface Booking {
   id: string
   customerName: string
+  /** เวลาที่สร้างใบจอง (ISO) — ใช้คำนวณเวลาสัมพัทธ์ เช่น หน้าแจ้งเตือน */
+  createdAt: string
   /** ปีที่ออกเลขที่ใบจอง — คู่กับ bookingNo ใช้ประกอบเลขที่ใบจอง BK-{bookingYear}-{bookingNo} */
   bookingYear: number
   /** เลขลำดับใบจองภายในปีนั้น เริ่ม 1 ทุกปี */
@@ -159,6 +161,8 @@ export interface Booking {
   paymentSlip?: string
   /** เวลาที่แนบสลิปล่าสุด */
   paymentSlipUploadedAt?: string
+  /** โปรไฟล์ลูกค้าปัจจุบันจริง (ชื่อ/นามสกุล/อีเมล/Line ID) — owner เท่านั้นที่ได้ค่านี้ (join จาก User), ไม่ใช่ snapshot ตอนจองแบบ customerName/phone/lineId */
+  customer?: { name: string; surname: string; email: string; lineId: string } | null
 }
 
 /**

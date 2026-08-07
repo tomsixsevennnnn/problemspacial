@@ -9,6 +9,9 @@ import { HOME_PROVINCE, ZONE_LABEL, deliveryFeeFor, formatFullAddress } from '..
 interface CartProps {
   navigate: (s: Screen) => void
   user: UserProfile | null
+  notifCount: number
+  /** เจ้าของร้านกำลังกด "มุมมองลูกค้า" ดูตัวอย่างอยู่ — จองจริงไม่ได้ (backend บล็อกอยู่แล้ว แต่กันฝั่ง UI ไว้ก่อนไม่ให้ยิง API เปล่าๆ) */
+  isOwnerPreview: boolean
   packages: PackageType[]
   booking: BookingData
   onConfirm: () => void
@@ -20,6 +23,8 @@ interface CartProps {
 export default function Cart({
   navigate,
   user,
+  notifCount,
+  isOwnerPreview,
   packages,
   booking,
   onConfirm,
@@ -28,6 +33,7 @@ export default function Cart({
   fuelCostPerKm,
 }: CartProps) {
   const [showConfirm, setShowConfirm] = useState(false)
+  const [ownerBlocked, setOwnerBlocked] = useState(false)
   const pkg = packages.find(p => p.id === booking.packageId) ?? null
   /** จับคู่เมนูที่เลือกกับ "ข้อ" ของแพ็กเกจ เพื่อแสดงตามลำดับเสิร์ฟ */
   const courseOf = (menuId: string) => pkg?.courses.find(c => c.items.some(i => i.id === menuId)) ?? null
@@ -39,15 +45,24 @@ export default function Cart({
       ? `ค่าเดินทาง (ระยะทาง ${((booking.location.distanceKm ?? 0) * 2).toFixed(1)} กม. ไป-กลับ)`
       : `ค่าขนส่ง (นอก${HOME_PROVINCE} ไม่ถึง ${freeDeliveryMinTables} โต๊ะ)`
 
-  const handleConfirm = () => {
+  const closeConfirm = () => {
     setShowConfirm(false)
+    setOwnerBlocked(false)
+  }
+
+  const handleConfirm = () => {
+    if (isOwnerPreview) {
+      setOwnerBlocked(true)
+      return
+    }
+    closeConfirm()
     onConfirm()
     navigate('history')
   }
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <Navbar navigate={navigate} currentScreen="cart" user={user} />
+      <Navbar navigate={navigate} currentScreen="cart" user={user} notifCount={notifCount} />
 
       <div className="pt-24 pb-12 max-w-5xl mx-auto px-4">
         <div className="mb-8">
@@ -249,7 +264,7 @@ export default function Cart({
               <div className="flex items-center justify-between">
                 <h3 className="text-lg font-bold text-white">ยืนยันการจอง</h3>
                 <button
-                  onClick={() => setShowConfirm(false)}
+                  onClick={closeConfirm}
                   className="w-8 h-8 bg-white/20 hover:bg-white/30 rounded-xl flex items-center justify-center text-white transition-colors"
                 >
                   <X size={16} />
@@ -258,6 +273,11 @@ export default function Cart({
             </div>
 
             <div className="p-6">
+              {ownerBlocked && (
+                <div className="bg-red-50 border border-red-100 text-red-600 text-sm rounded-2xl p-4 mb-4 leading-relaxed">
+                  ไม่สามารถจองได้ เพราะคุณคือเจ้าของร้าน — "มุมมองลูกค้า" มีไว้ดูตัวอย่างหน้าจอเท่านั้น ต้อง login ด้วยบัญชีลูกค้าจริงเพื่อจอง
+                </div>
+              )}
               <div className="space-y-3 mb-6">
                 {[
                   { label: 'วันที่', value: booking.date ? new Date(booking.date + 'T00:00:00').toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' }) : '-' },
@@ -281,17 +301,19 @@ export default function Cart({
 
               <div className="flex gap-3">
                 <button
-                  onClick={() => setShowConfirm(false)}
+                  onClick={closeConfirm}
                   className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-2xl py-3.5 font-semibold transition-colors"
                 >
                   ยกเลิก
                 </button>
-                <button
-                  onClick={handleConfirm}
-                  className="flex-1 bg-orange-500 hover:bg-orange-600 text-white rounded-2xl py-3.5 font-semibold transition-all shadow-lg shadow-orange-200"
-                >
-                  ยืนยันการจอง
-                </button>
+                {!ownerBlocked && (
+                  <button
+                    onClick={handleConfirm}
+                    className="flex-1 bg-orange-500 hover:bg-orange-600 text-white rounded-2xl py-3.5 font-semibold transition-all shadow-lg shadow-orange-200"
+                  >
+                    ยืนยันการจอง
+                  </button>
+                )}
               </div>
             </div>
           </div>

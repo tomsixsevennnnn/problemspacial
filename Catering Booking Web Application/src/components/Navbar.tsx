@@ -5,10 +5,10 @@ interface NavbarProps {
   navigate: (s: Screen) => void
   currentScreen: Screen
   user: UserProfile | null
-  notifCount?: number
+  notifCount: number
 }
 
-export default function Navbar({ navigate, currentScreen, user, notifCount = 2 }: NavbarProps) {
+export default function Navbar({ navigate, currentScreen, user, notifCount }: NavbarProps) {
   const navItems = [
     { label: 'หน้าแรก', screen: 'home' as Screen, icon: Home },
     { label: 'ประวัติการจอง', screen: 'history' as Screen, icon: Calendar },
