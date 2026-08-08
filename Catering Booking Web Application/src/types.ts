@@ -33,6 +33,10 @@ export interface MenuItem {
   category: string
   description: string
   image?: string
+  /** ตำแหน่งโฟกัสของรูป (%) สำหรับจัดกรอบ object-cover — ไม่ตั้งค่า = กึ่งกลาง */
+  imagePosition?: { x: number; y: number }
+  /** ระดับซูมของรูป (1 = ปกติ, มากกว่า 1 = ขยาย) — ไม่ตั้งค่า = 1 */
+  imageScale?: number
   extraPrice?: number
   /** ราคาทุนต่อจาน (บาท) — กรอกตรงๆ ไม่คำนวณจากวัตถุดิบ */
   costPrice?: number

@@ -1,6 +1,7 @@
 import { ArrowRight, CheckCircle, ChevronRight, Clock, MapPin, Users } from 'lucide-react'
 import Navbar from '../components/Navbar'
 import type { Screen, UserProfile } from '../types'
+import heroImage1 from '../img/content1.png'
 
 interface HomeProps {
   navigate: (s: Screen) => void
@@ -34,7 +35,7 @@ export default function Home({ navigate, user, notifCount }: HomeProps) {
       <section className="relative pt-16 overflow-hidden">
         <div className="relative h-[580px] md:h-[640px]">
           <img
-            src="https://images.unsplash.com/photo-1414235077428-338989a2e8c0?w=1600&h=800&fit=crop&auto=format"
+            src={heroImage1}
             alt="บริการจัดเลี้ยง"
             className="w-full h-full object-cover"
           />
