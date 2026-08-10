@@ -1,4 +1,4 @@
-import type { AppSettings, Booking, MenuItem, Package, QueueBooking } from './types'
+import type { AppSettings, Booking, MenuItem, Package, QueueBooking, ShopInfo } from './types'
 import { DEFAULT_CATEGORY_ORDER } from './data'
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:3000'
@@ -87,6 +87,24 @@ const toFrontendSettings = (s: BackendSettings): AppSettings => ({
   categoryOrder: s.categoryOrder ?? DEFAULT_CATEGORY_ORDER,
   shopLocation: { lat: s.shopLocationLat, lng: s.shopLocationLng },
   fuelCostPerKm: s.fuelCostPerKm,
+})
+
+interface BackendPublicShopInfo {
+  shopName: string
+  shopNameEn: string
+  shopInitials: string
+  shopAddress: string
+  shopPhone: string
+  shopLine: string
+}
+
+const toFrontendShopInfo = (s: BackendPublicShopInfo): ShopInfo => ({
+  name: s.shopName,
+  nameEn: s.shopNameEn,
+  initials: s.shopInitials,
+  address: s.shopAddress,
+  phone: s.shopPhone,
+  line: s.shopLine,
 })
 
 const toBackendSettingsPatch = (patch: Partial<AppSettings>): Record<string, unknown> => {
@@ -217,6 +235,9 @@ export const api = {
 
   deletePackage: (token: string, id: string) => request<void>(token, `/packages/${id}`, { method: 'DELETE' }),
 
+  reorderPackages: (token: string, ids: string[]) =>
+    request<Package[]>(token, '/packages/reorder', { method: 'PATCH', body: JSON.stringify({ ids }) }),
+
   menus: (token: string) => request<MenuItem[]>(token, '/menus'),
 
   createMenu: (token: string, input: Omit<MenuItem, 'id'>) =>
@@ -229,6 +250,13 @@ export const api = {
 
   settings: async (token: string): Promise<AppSettings> =>
     toFrontendSettings(await request<BackendSettings>(token, '/settings')),
+
+  /** ข้อมูลร้านสาธารณะ — เรียกได้ก่อน login ไม่ต้องแนบ token (หน้า Login, ชื่อแท็บเบราว์เซอร์) */
+  publicShopInfo: async (): Promise<ShopInfo> => {
+    const res = await fetch(`${API_BASE}/settings/public`)
+    if (!res.ok) throw new Error(`API GET /settings/public -> ${res.status}`)
+    return toFrontendShopInfo((await res.json()) as BackendPublicShopInfo)
+  },
 
   updateSettings: async (token: string, patch: Partial<AppSettings>): Promise<AppSettings> =>
     toFrontendSettings(

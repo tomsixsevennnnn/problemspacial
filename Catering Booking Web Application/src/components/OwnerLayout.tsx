@@ -24,6 +24,7 @@ interface OwnerLayoutProps {
   currentScreen: Screen
   user: UserProfile | null
   bookings: Booking[]
+  shopName: string
   children: ReactNode
 }
 
@@ -41,7 +42,7 @@ const sidebarItems = [
   { label: 'ตั้งค่า', screen: 'owner-settings' as Screen, icon: Settings },
 ]
 
-export default function OwnerLayout({ navigate, currentScreen, user, bookings, children }: OwnerLayoutProps) {
+export default function OwnerLayout({ navigate, currentScreen, user, bookings, shopName, children }: OwnerLayoutProps) {
   // ต่ำกว่า lg (จอแท็บเล็ตแนวตั้งอย่าง iPad) sidebar ซ่อนเป็น off-canvas drawer เปิดผ่านปุ่มแฮมเบอร์เกอร์
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [notifOpen, setNotifOpen] = useState(false)
@@ -98,8 +99,8 @@ export default function OwnerLayout({ navigate, currentScreen, user, bookings, c
             <div className="w-10 h-10 bg-orange-500 rounded-xl flex items-center justify-center">
               <ChefHat size={20} className="text-white" />
             </div>
-            <div>
-              <p className="font-bold text-white leading-tight text-sm">ครัวไทย</p>
+            <div className="min-w-0">
+              <p className="font-bold text-white leading-tight text-sm truncate">{shopName}</p>
               <p className="text-[10px] text-gray-400 leading-tight">Owner Dashboard</p>
             </div>
           </div>
@@ -139,7 +140,7 @@ export default function OwnerLayout({ navigate, currentScreen, user, bookings, c
               className="w-9 h-9 rounded-full object-cover"
             />
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-white truncate">{user?.name || 'เจ้าของร้านพิพัฒน์โภชนา'}</p>
+              <p className="text-sm font-medium text-white truncate">{user?.name || 'เจ้าของร้าน'}</p>
               <p className="text-[10px] text-gray-400 truncate">{user?.email || '—'}</p>
             </div>
             <button

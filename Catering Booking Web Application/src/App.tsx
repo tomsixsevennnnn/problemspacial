@@ -3,7 +3,7 @@ import { useAuth0 } from '@auth0/auth0-react'
 import { LayoutDashboard } from 'lucide-react'
 import type { AppSettings, BookingData, Screen, UserProfile, Booking, EventLocation, MenuItem, Package, QueueBooking } from './types'
 import { DEFAULT_CATEGORY_ORDER, includedItems } from './data'
-import { DEFAULT_DEPOSIT_RATE, DEFAULT_SHOP_INFO } from './documents'
+import { DEFAULT_DEPOSIT_RATE, DEFAULT_SHOP_INFO, SHOP_NAME_CACHE_KEY } from './documents'
 import {
   DEFAULT_DELIVERY_FEE,
   DEFAULT_FREE_DELIVERY_MIN_TABLES,
@@ -99,6 +99,17 @@ export default function App() {
   // แจ้งเตือนลอยตอนทำรายการ (จอง/แก้แพ็กเกจ/แก้เมนู ฯลฯ) ไม่สำเร็จ — คนละเรื่องกับ loadError ที่บล็อกทั้งหน้า
   const [actionError, setActionError] = useState<string | null>(null)
 
+  /** ตั้งชื่อแท็บเบราว์เซอร์ให้ไวที่สุดตั้งแต่แอป mount — ใช้ endpoint สาธารณะ ไม่ต้องรอ login/โหลดข้อมูลครบชุดเหมือน settings ปกติ */
+  useEffect(() => {
+    api
+      .publicShopInfo()
+      .then(info => {
+        document.title = info.name
+        localStorage.setItem(SHOP_NAME_CACHE_KEY, info.name)
+      })
+      .catch(() => {})
+  }, [])
+
   /** โหลดข้อมูลทั้งหมดจาก backend ทันทีที่ login สำเร็จ — sync user + ดึง bookings/packages/menus/settings พร้อมกัน */
   useEffect(() => {
     if (!isAuthenticated) return
@@ -141,6 +152,12 @@ export default function App() {
   }, [isAuthenticated, getAccessTokenSilently, auth0User, retryKey])
 
   const withToken = () => getAccessTokenSilently()
+
+  /** อัปเดตชื่อร้านบนแท็บเบราว์เซอร์ + จำไว้ใน localStorage ให้หน้า Login ใช้ได้ก่อน login */
+  useEffect(() => {
+    document.title = settings.shopInfo.name
+    localStorage.setItem(SHOP_NAME_CACHE_KEY, settings.shopInfo.name)
+  }, [settings.shopInfo.name])
 
   /** ห่อ handler ที่ยิง API ทุกตัว — ถ้า error ให้เด้ง banner แจ้งผู้ใช้แทนที่จะเงียบ/พังไม่รู้สาเหตุ */
   const runAction = async (fn: () => Promise<void>) => {
@@ -214,6 +231,22 @@ export default function App() {
       await api.deletePackage(token, id)
       setPackages(prev => prev.filter(p => p.id !== id))
     })
+
+  /** เจ้าของร้านลากจัดลำดับแพ็กเกจในหน้าจัดการแพ็กเกจ — อัปเดตหน้าจอทันที แล้วค่อยบันทึก */
+  const handleReorderPackages = async (ids: string[]) => {
+    const prevPackages = packages
+    const byId = new Map(prevPackages.map(p => [p.id, p]))
+    setPackages(ids.map(id => byId.get(id)).filter((p): p is Package => !!p))
+    try {
+      setActionError(null)
+      const token = await withToken()
+      const reordered = await api.reorderPackages(token, ids)
+      setPackages(reordered)
+    } catch (err) {
+      setPackages(prevPackages)
+      setActionError(err instanceof Error ? err.message : 'ทำรายการไม่สำเร็จ ลองใหม่อีกครั้ง')
+    }
+  }
 
   /** เข้าเว็บด้วย role จาก Auth0 (customer = Google, owner = username/password) ดู src/auth.ts */
   const role = roleFromAuth0User(auth0User as Record<string, unknown> | undefined)
@@ -409,6 +442,7 @@ export default function App() {
         currentScreen={effectiveScreen}
         user={user}
         bookings={bookings}
+        shopName={settings.shopInfo.name}
       >
         {actionError && <ErrorBanner message={actionError} onDismiss={() => setActionError(null)} />}
         {effectiveScreen === 'owner-dashboard' && (
@@ -428,6 +462,7 @@ export default function App() {
             onCreatePackage={handleCreatePackage}
             onUpdatePackage={handleUpdatePackage}
             onDeletePackage={handleDeletePackage}
+            onReorderPackages={handleReorderPackages}
           />
         )}
         {effectiveScreen === 'owner-menus' && (
@@ -470,13 +505,14 @@ export default function App() {
         </button>
       )}
       {effectiveScreen === 'home' && (
-        <Home navigate={navigate} user={user} notifCount={notifCount} />
+        <Home navigate={navigate} user={user} notifCount={notifCount} shopName={settings.shopInfo.name} />
       )}
       {effectiveScreen === 'booking-calendar' && (
         <BookingCalendar
           navigate={navigate}
           user={user}
           notifCount={notifCount}
+          shopName={settings.shopInfo.name}
           bookings={availability}
           onSelectDateTime={handleSelectDateTime}
         />
@@ -486,6 +522,7 @@ export default function App() {
           navigate={navigate}
           user={user}
           notifCount={notifCount}
+          shopName={settings.shopInfo.name}
           tables={booking.tables}
           onSetTables={handleSetTables}
           date={booking.date}
@@ -499,6 +536,7 @@ export default function App() {
           navigate={navigate}
           user={user}
           notifCount={notifCount}
+          shopName={settings.shopInfo.name}
           tables={booking.tables}
           location={booking.location}
           onSetLocation={handleSetLocation}
@@ -513,6 +551,7 @@ export default function App() {
           navigate={navigate}
           user={user}
           notifCount={notifCount}
+          shopName={settings.shopInfo.name}
           packages={packages}
           tables={booking.tables}
           selectedPackageId={booking.packageId}
@@ -524,6 +563,7 @@ export default function App() {
           navigate={navigate}
           user={user}
           notifCount={notifCount}
+          shopName={settings.shopInfo.name}
           packages={packages}
           packageId={booking.packageId}
           selectedMenus={booking.selectedMenus}
@@ -535,6 +575,7 @@ export default function App() {
           navigate={navigate}
           user={user}
           notifCount={notifCount}
+          shopName={settings.shopInfo.name}
           isOwnerPreview={role === 'owner'}
           packages={packages}
           booking={booking}
@@ -555,7 +596,7 @@ export default function App() {
         />
       )}
       {effectiveScreen === 'notifications' && (
-        <Notifications navigate={navigate} user={user} notifCount={notifCount} bookings={bookings} />
+        <Notifications navigate={navigate} user={user} notifCount={notifCount} bookings={bookings} shopName={settings.shopInfo.name} />
       )}
     </>
   )

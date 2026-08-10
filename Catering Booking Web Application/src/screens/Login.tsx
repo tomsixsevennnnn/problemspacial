@@ -1,9 +1,24 @@
 import { useAuth0 } from '@auth0/auth0-react'
 import { ChefHat } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { api } from '../api'
 import { AUTH0_CONNECTION } from '../auth'
+import { DEFAULT_SHOP_INFO, SHOP_NAME_CACHE_KEY } from '../documents'
 
 export default function Login() {
   const { loginWithRedirect, isLoading } = useAuth0()
+  // แสดงค่าที่จำไว้ล่าสุดไปพลางๆ (โหลดทันที ไม่ต้องรอ network) แล้วค่อย fetch ชื่อจริงจาก /settings/public มาทับ
+  const [shopName, setShopName] = useState(() => localStorage.getItem(SHOP_NAME_CACHE_KEY) || DEFAULT_SHOP_INFO.name)
+
+  useEffect(() => {
+    api
+      .publicShopInfo()
+      .then(info => {
+        setShopName(info.name)
+        localStorage.setItem(SHOP_NAME_CACHE_KEY, info.name)
+      })
+      .catch(() => {})
+  }, [])
 
   const loginAsCustomer = () =>
     loginWithRedirect({ authorizationParams: { connection: AUTH0_CONNECTION.customer } })
@@ -25,7 +40,7 @@ export default function Login() {
           <div className="inline-flex items-center justify-center w-16 h-16 bg-orange-500 rounded-2xl shadow-lg shadow-orange-200 mb-4">
             <ChefHat size={32} className="text-white" />
           </div>
-          <h1 className="text-2xl font-bold text-gray-900">ร้านพิพัฒน์โภชนา</h1>
+          <h1 className="text-2xl font-bold text-gray-900">{shopName}</h1>
           <p className="text-gray-500 mt-1 text-sm">ระบบจองจัดเลี้ยงนอกสถานที่</p>
         </div>
 

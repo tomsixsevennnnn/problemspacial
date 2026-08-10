@@ -7,6 +7,7 @@ interface SelectTableProps {
   navigate: (s: Screen) => void
   user: UserProfile | null
   notifCount: number
+  shopName: string
   tables: number
   onSetTables: (n: number) => void
   date: string | null
@@ -15,7 +16,7 @@ interface SelectTableProps {
   freeDeliveryMinTables: number
 }
 
-export default function SelectTable({ navigate, user, notifCount, tables, onSetTables, date, timeSlot, deliveryFee, freeDeliveryMinTables }: SelectTableProps) {
+export default function SelectTable({ navigate, user, notifCount, shopName, tables, onSetTables, date, timeSlot, deliveryFee, freeDeliveryMinTables }: SelectTableProps) {
   const totalGuests = tables * 10
 
   const handleTableInput = (value: string) => {
@@ -26,7 +27,7 @@ export default function SelectTable({ navigate, user, notifCount, tables, onSetT
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <Navbar navigate={navigate} currentScreen="select-table" user={user} notifCount={notifCount} />
+      <Navbar navigate={navigate} currentScreen="select-table" user={user} notifCount={notifCount} shopName={shopName} />
 
       <div className="pt-24 pb-12 max-w-2xl mx-auto px-4">
         <div className="mb-8">

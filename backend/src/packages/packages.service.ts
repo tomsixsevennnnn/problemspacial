@@ -10,11 +10,13 @@ export class PackagesService {
 
   findAll() {
     return this.prisma.package.findMany({
+      orderBy: { sortOrder: 'asc' },
       include: { courses: { include: { items: true }, orderBy: { no: 'asc' } } },
     })
   }
 
-  create(dto: CreatePackageDto) {
+  async create(dto: CreatePackageDto) {
+    const count = await this.prisma.package.count()
     return this.prisma.package.create({
       data: {
         name: dto.name,
@@ -23,6 +25,7 @@ export class PackagesService {
         description: dto.description ?? '',
         features: dto.features ?? [],
         badge: dto.badge,
+        sortOrder: count,
         courses: {
           create: dto.courses.map((c) => ({
             no: c.no,
@@ -83,6 +86,14 @@ export class PackagesService {
 
   remove(id: string) {
     return this.prisma.package.delete({ where: { id } })
+  }
+
+  /** เจ้าของร้านลากจัดลำดับแพ็กเกจใหม่ — รับ id ทุกแพ็กเกจเรียงตามลำดับที่ต้องการ */
+  async reorder(ids: string[]) {
+    await this.prisma.$transaction(
+      ids.map((id, index) => this.prisma.package.update({ where: { id }, data: { sortOrder: index } })),
+    )
+    return this.findAll()
   }
 
   /** เพิ่มข้อใหม่เข้าแพ็กเกจที่มีอยู่ โดยไม่ต้องส่งคอร์สทั้งชุด */

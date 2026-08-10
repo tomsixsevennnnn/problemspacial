@@ -7,6 +7,7 @@ interface HomeProps {
   navigate: (s: Screen) => void
   user: UserProfile | null
   notifCount: number
+  shopName: string
 }
 
 const STEPS = [
@@ -26,10 +27,10 @@ const GALLERY = [
   'https://images.unsplash.com/photo-1559339352-11d035aa65de?w=600&h=400&fit=crop&auto=format',
 ]
 
-export default function Home({ navigate, user, notifCount }: HomeProps) {
+export default function Home({ navigate, user, notifCount, shopName }: HomeProps) {
   return (
     <div className="min-h-screen bg-gray-50">
-      <Navbar navigate={navigate} currentScreen="home" user={user} notifCount={notifCount} />
+      <Navbar navigate={navigate} currentScreen="home" user={user} notifCount={notifCount} shopName={shopName} />
 
       {/* Hero */}
       <section className="relative pt-16 overflow-hidden">
@@ -158,7 +159,7 @@ export default function Home({ navigate, user, notifCount }: HomeProps) {
       {/* Footer */}
       <footer className="bg-gray-900 text-gray-400 py-10 px-6">
         <div className="max-w-7xl mx-auto text-center">
-          <p className="font-bold text-white mb-1">ร้านพิพัฒน์โภชนา</p>
+          <p className="font-bold text-white mb-1">ร้าน</p>
           <p className="text-sm">© 2025 Krathai Catering Service. All rights reserved.</p>
         </div>
       </footer>

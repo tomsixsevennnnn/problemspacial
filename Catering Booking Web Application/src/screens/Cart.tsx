@@ -10,6 +10,7 @@ interface CartProps {
   navigate: (s: Screen) => void
   user: UserProfile | null
   notifCount: number
+  shopName: string
   /** เจ้าของร้านกำลังกด "มุมมองลูกค้า" ดูตัวอย่างอยู่ — จองจริงไม่ได้ (backend บล็อกอยู่แล้ว แต่กันฝั่ง UI ไว้ก่อนไม่ให้ยิง API เปล่าๆ) */
   isOwnerPreview: boolean
   packages: PackageType[]
@@ -24,6 +25,7 @@ export default function Cart({
   navigate,
   user,
   notifCount,
+  shopName,
   isOwnerPreview,
   packages,
   booking,
@@ -62,7 +64,7 @@ export default function Cart({
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <Navbar navigate={navigate} currentScreen="cart" user={user} notifCount={notifCount} />
+      <Navbar navigate={navigate} currentScreen="cart" user={user} notifCount={notifCount} shopName={shopName} />
 
       <div className="pt-24 pb-12 max-w-5xl mx-auto px-4">
         <div className="mb-8">

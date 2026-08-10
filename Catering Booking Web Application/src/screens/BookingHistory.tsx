@@ -87,7 +87,7 @@ export default function BookingHistory({ navigate, user, notifCount, bookings, o
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <Navbar navigate={navigate} currentScreen="history" user={user} notifCount={notifCount} />
+      <Navbar navigate={navigate} currentScreen="history" user={user} notifCount={notifCount} shopName={settings.shopInfo.name} />
 
       <div className="pt-24 pb-12 max-w-6xl mx-auto px-4">
         <div className="mb-8">

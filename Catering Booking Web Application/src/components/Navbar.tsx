@@ -6,9 +6,10 @@ interface NavbarProps {
   currentScreen: Screen
   user: UserProfile | null
   notifCount: number
+  shopName: string
 }
 
-export default function Navbar({ navigate, currentScreen, user, notifCount }: NavbarProps) {
+export default function Navbar({ navigate, currentScreen, user, notifCount, shopName }: NavbarProps) {
   const navItems = [
     { label: 'หน้าแรก', screen: 'home' as Screen, icon: Home },
     { label: 'ประวัติการจอง', screen: 'history' as Screen, icon: Calendar },
@@ -26,8 +27,8 @@ export default function Navbar({ navigate, currentScreen, user, notifCount }: Na
             <div className="w-9 h-9 bg-orange-500 rounded-xl flex items-center justify-center group-hover:bg-orange-600 transition-colors">
               <ChefHat size={20} className="text-white" />
             </div>
-            <div>
-              <p className="font-bold text-gray-900 leading-tight text-sm">ร้านพิพัฒน์โภชนา</p>
+            <div className="min-w-0">
+              <p className="font-bold text-gray-900 leading-tight text-sm truncate">{shopName}</p>
               <p className="text-[10px] text-gray-400 leading-tight">Catering Service</p>
             </div>
           </button>

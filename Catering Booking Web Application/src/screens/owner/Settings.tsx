@@ -10,7 +10,7 @@ interface SettingsProps {
 }
 
 const SHOP_FIELDS: { key: keyof AppSettings['shopInfo']; label: string; placeholder: string }[] = [
-  { key: 'name', label: 'ชื่อร้าน (ไทย)', placeholder: 'เช่น ร้านพิพัฒน์โภชนา' },
+  { key: 'name', label: 'ชื่อร้าน (ไทย)', placeholder: 'เช่น ร้าน' },
   { key: 'nameEn', label: 'ชื่อร้าน (อังกฤษ)', placeholder: 'เช่น Pipat Phochana Catering' },
   { key: 'initials', label: 'อักษรย่อ (แสดงบนโลโก้เอกสาร)', placeholder: 'เช่น PP' },
   { key: 'phone', label: 'เบอร์โทรร้าน', placeholder: 'เช่น 034-XXX-XXX' },

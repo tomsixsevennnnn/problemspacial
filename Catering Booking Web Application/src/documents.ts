@@ -10,6 +10,9 @@ export const DEFAULT_SHOP_INFO: ShopInfo = {
   line: '@pipatphochana',
 }
 
+/** จำชื่อร้านล่าสุดไว้ใน localStorage เพื่อให้หน้า Login (ก่อน login ยังดึงจาก backend ไม่ได้) แสดงชื่อที่ถูกต้อง */
+export const SHOP_NAME_CACHE_KEY = 'shop-name'
+
 export type DocType = 'quotation' | 'booking'
 
 export const DOC_LABEL: Record<DocType, string> = {

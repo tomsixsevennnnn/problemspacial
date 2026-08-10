@@ -54,6 +54,8 @@ model Package {
   description   String          @default("")
   features      String[]
   badge         String?
+  /** ลำดับการแสดงในหน้าจัดการแพ็กเกจ — เจ้าของร้านลากจัดเรียงเอง */
+  sortOrder     Int             @default(0)
   courses       PackageCourse[]
 }
 

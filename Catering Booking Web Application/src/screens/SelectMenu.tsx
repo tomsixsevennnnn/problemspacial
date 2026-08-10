@@ -9,13 +9,14 @@ interface SelectMenuProps {
   navigate: (s: Screen) => void
   user: UserProfile | null
   notifCount: number
+  shopName: string
   packages: Package[]
   packageId: string | null
   selectedMenus: MenuItem[]
   onSetMenus: (menus: MenuItem[]) => void
 }
 
-export default function SelectMenu({ navigate, user, notifCount, packages, packageId, selectedMenus, onSetMenus }: SelectMenuProps) {
+export default function SelectMenu({ navigate, user, notifCount, shopName, packages, packageId, selectedMenus, onSetMenus }: SelectMenuProps) {
   const pkg = packages.find(p => p.id === packageId) ?? null
   const [activeCourseNo, setActiveCourseNo] = useState(1)
 
@@ -40,7 +41,7 @@ export default function SelectMenu({ navigate, user, notifCount, packages, packa
   if (!pkg) {
     return (
       <div className="min-h-screen bg-gray-50">
-        <Navbar navigate={navigate} currentScreen="select-menu" user={user} notifCount={notifCount} />
+        <Navbar navigate={navigate} currentScreen="select-menu" user={user} notifCount={notifCount} shopName={shopName} />
         <div className="pt-32 text-center px-6">
           <p className="text-5xl mb-4">🍽️</p>
           <p className="text-gray-500 mb-6">กรุณาเลือกแพ็กเกจก่อนเลือกเมนูอาหาร</p>
@@ -82,7 +83,7 @@ export default function SelectMenu({ navigate, user, notifCount, packages, packa
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col" style={{ height: '100vh', overflow: 'hidden' }}>
-      <Navbar navigate={navigate} currentScreen="select-menu" user={user} notifCount={notifCount} />
+      <Navbar navigate={navigate} currentScreen="select-menu" user={user} notifCount={notifCount} shopName={shopName} />
 
       {/* Fixed header */}
       <div className="pt-16 bg-white border-b border-gray-100 shadow-sm flex-shrink-0">
