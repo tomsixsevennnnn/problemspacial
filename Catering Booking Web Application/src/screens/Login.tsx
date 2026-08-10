@@ -10,14 +10,29 @@ export default function Login() {
   // แสดงค่าที่จำไว้ล่าสุดไปพลางๆ (โหลดทันที ไม่ต้องรอ network) แล้วค่อย fetch ชื่อจริงจาก /settings/public มาทับ
   const [shopName, setShopName] = useState(() => localStorage.getItem(SHOP_NAME_CACHE_KEY) || DEFAULT_SHOP_INFO.name)
 
+  // fetch ทันทีตอน mount แล้ว poll ต่อทุก 20 วินาที (หยุดตอนสลับแท็บ) — เผื่อเจ้าของร้านแก้ชื่อร้านระหว่างที่ค้างอยู่หน้านี้พอดี
   useEffect(() => {
-    api
-      .publicShopInfo()
-      .then(info => {
-        setShopName(info.name)
-        localStorage.setItem(SHOP_NAME_CACHE_KEY, info.name)
-      })
-      .catch(() => {})
+    const fetchShopName = () =>
+      api
+        .publicShopInfo()
+        .then(info => {
+          setShopName(info.name)
+          localStorage.setItem(SHOP_NAME_CACHE_KEY, info.name)
+        })
+        .catch(() => {})
+
+    fetchShopName()
+    const interval = setInterval(() => {
+      if (!document.hidden) fetchShopName()
+    }, 20000)
+    const onVisible = () => {
+      if (!document.hidden) fetchShopName()
+    }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => {
+      clearInterval(interval)
+      document.removeEventListener('visibilitychange', onVisible)
+    }
   }, [])
 
   const loginAsCustomer = () =>

@@ -151,6 +151,35 @@ export default function App() {
     }
   }, [isAuthenticated, getAccessTokenSilently, auth0User, retryKey])
 
+  /** poll ค่าตั้งค่าร้านทุก 20 วินาที — ให้ทุกเครื่องเห็นการแก้ไข (เช่น ชื่อร้าน) โดยอัตโนมัติ ไม่ต้องกด refresh เอง
+   *  หยุด poll เมื่อสลับไปแท็บ/แอปอื่น (document.hidden) กันยิง request เปล่าๆ ตอนไม่มีใครดูอยู่ */
+  useEffect(() => {
+    if (!dataLoaded) return
+
+    const pollOnce = async () => {
+      try {
+        const token = await getAccessTokenSilently()
+        const fresh = await api.settings(token)
+        setSettings(prev => (JSON.stringify(prev) === JSON.stringify(fresh) ? prev : fresh))
+      } catch {
+        // เงียบไว้ — ไม่ใช่รายการที่ผู้ใช้กดเอง ไม่ต้องเด้ง error banner รบกวน แค่ลองใหม่รอบถัดไป
+      }
+    }
+
+    const interval = setInterval(() => {
+      if (!document.hidden) pollOnce()
+    }, 20000)
+    // กลับมาที่แท็บนี้อีกครั้ง — ดึงค่าล่าสุดทันทีแทนที่จะรอรอบ poll ถัดไป
+    const onVisible = () => {
+      if (!document.hidden) pollOnce()
+    }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => {
+      clearInterval(interval)
+      document.removeEventListener('visibilitychange', onVisible)
+    }
+  }, [dataLoaded, getAccessTokenSilently])
+
   const withToken = () => getAccessTokenSilently()
 
   /** อัปเดตชื่อร้านบนแท็บเบราว์เซอร์ + จำไว้ใน localStorage ให้หน้า Login ใช้ได้ก่อน login */

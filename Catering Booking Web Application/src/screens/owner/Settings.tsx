@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { ArrowDown, ArrowUp, Building2, Check, Fuel, ListOrdered, Loader2, MapPin, Navigation, Percent, Save, Truck, Users } from 'lucide-react'
 import type { AppSettings } from '../../types'
 import { orderedCategories } from '../../data'
@@ -29,6 +29,15 @@ export default function Settings({ settings, onUpdateSettings }: SettingsProps) 
   const [savedAt, setSavedAt] = useState<number | null>(null)
   const [locating, setLocating] = useState(false)
   const [locateError, setLocateError] = useState<string | null>(null)
+
+  // settings prop เปลี่ยนได้เองจาก polling (คนอื่นแก้ที่เครื่องอื่น) — sync form ตามให้ถ้ายังไม่ได้แก้อะไรค้างไว้
+  // (เทียบกับค่า settings "ก่อนหน้า" ไม่ใช่ค่าล่าสุด กัน false positive ตอนกำลังจะเปลี่ยนพอดี)
+  const prevSettingsRef = useRef(settings)
+  useEffect(() => {
+    const prevSettings = prevSettingsRef.current
+    prevSettingsRef.current = settings
+    setForm(f => (JSON.stringify(f) === JSON.stringify(prevSettings) ? settings : f))
+  }, [settings])
 
   const dirty = JSON.stringify(form) !== JSON.stringify(settings)
 

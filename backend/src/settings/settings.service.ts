@@ -30,13 +30,18 @@ export class SettingsService {
   constructor(private prisma: PrismaService) {}
 
   /** cache แถว settings เดียวไว้ในหน่วยความจำ — DB จริงอยู่ที่ Railway แต่ละ query กิน ~1-2s
-   *  ทำให้ request ถัดจากแรกเร็วขึ้นเหลือหลัก ms, ลบ cache ทิ้งทันทีตอน update() ให้ตรงกับของจริงเสมอ */
+   *  ทำให้ request ถัดจากแรกเร็วขึ้นเหลือหลัก ms, update() ในเครื่องเดียวกันล้าง cache ทันที
+   *  แต่ backend คนละเครื่อง/process (เช่น เปิดพัฒนาคู่กันแล้วชี้ DB เดียวกัน) จะไม่รู้ว่ามีการ update()
+   *  จากอีกฝั่ง เลยต้องมี TTL ให้ cache หมดอายุเองด้วย ไม่ใช่ cache ค้างตลอดไป */
   private cached: Settings | null = null
+  private cachedAt = 0
+  private readonly CACHE_TTL_MS = 1000
 
   async get(): Promise<Settings> {
-    if (this.cached) return this.cached
+    if (this.cached && Date.now() - this.cachedAt < this.CACHE_TTL_MS) return this.cached
     const existing = await this.prisma.settings.findUnique({ where: { id: 1 } })
     this.cached = existing ?? (await this.prisma.settings.create({ data: DEFAULT_SETTINGS }))
+    this.cachedAt = Date.now()
     return this.cached
   }
 
@@ -44,6 +49,7 @@ export class SettingsService {
     await this.get()
     const updated = await this.prisma.settings.update({ where: { id: 1 }, data: dto })
     this.cached = updated
+    this.cachedAt = Date.now()
     return updated
   }
 
