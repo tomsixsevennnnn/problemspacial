@@ -5,7 +5,6 @@ export class CreateBookingDto {
   @IsString() timeSlot!: string
 
   @IsInt() @Min(1) tables!: number
-  @IsInt() @Min(1) guestCount!: number
 
   @IsString() packageName!: string
   @IsInt() @Min(0) totalPrice!: number

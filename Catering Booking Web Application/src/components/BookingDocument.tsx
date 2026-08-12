@@ -107,7 +107,6 @@ export default function BookingDocument({
             { label: 'วันที่จัดงาน', value: formatThaiDate(booking.date, true) },
             { label: 'ช่วงเวลา', value: booking.timeSlot },
             { label: 'จำนวนโต๊ะ', value: `${booking.tables} โต๊ะ` },
-            { label: 'ผู้ร่วมงาน', value: `${booking.guestCount ?? booking.tables * 10} คน` },
           ].map(({ label, value }) => (
             <div key={label}>
               <p className="text-gray-400 text-[10px]">{label}</p>

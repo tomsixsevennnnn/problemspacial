@@ -251,7 +251,7 @@ title: "Requirement Specification — ระบบจองแคทเธอร
 - **MenuItem** — `id, name, category, description, image?, extraPrice?, active` → เชื่อมกับหลาย `PackageCourse` (many-to-many ผ่าน `CourseItems`)
 - **Package** — `id, name, pricePerTable, menuLimit, description, features[], badge?` → มีหลาย `PackageCourse`
 - **PackageCourse** — `id, packageId, no, title, category, choose (0=รวมมาให้แล้ว/>0=เลือกได้กี่อย่าง), items[]`
-- **Booking** — `id, customerId?, customerName, date, timeSlot, tables, guestCount, packageName, totalPrice, pricePerTable?, deliveryFee?, status(PENDING|CONFIRMED|COMPLETED|CANCELLED), location, locationDetail(json)?, menus[], phone, staffAuto/staffActual(json)?, staffNote?, staffSavedAt?, paymentSlipUrl?, paymentSlipUploadedAt?, createdAt` — index บน `customerId` และ `date`
+- **Booking** — `id, customerId?, customerName, date, timeSlot, tables, packageName, totalPrice, pricePerTable?, deliveryFee?, status(PENDING|CONFIRMED|COMPLETED|CANCELLED), location, locationDetail(json)?, menus[], phone, staffAuto/staffActual(json)?, staffNote?, staffSavedAt?, paymentSlipUrl?, paymentSlipUploadedAt?, createdAt` — index บน `customerId` และ `date`
 - **Settings** — แถวเดียวเสมอ (`id=1`): `shopName, shopNameEn, shopInitials, shopAddress, shopPhone, shopLine, depositRate(0–1), deliveryFee, freeDeliveryMinTables`
 
 ---

@@ -105,7 +105,6 @@ export interface BookingData {
   date: string | null
   timeSlot: string | null
   tables: number
-  guestCount: number
   location: EventLocation | null
   packageId: string | null
   packageName: string | null
@@ -139,7 +138,6 @@ export interface Booking {
   date: string
   timeSlot: string
   tables: number
-  guestCount: number
   packageName: string
   totalPrice: number
   /** แยกยอดไว้ออกเอกสาร — ยอดค่าอาหาร + ค่าขนส่ง = totalPrice */

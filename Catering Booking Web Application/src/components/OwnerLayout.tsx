@@ -18,6 +18,7 @@ import {
 import { buildNotifications, formatRelativeTime } from '../notifications'
 import type { Booking, Screen, UserProfile } from '../types'
 import type { ReactNode } from 'react'
+import Avatar from './Avatar'
 
 interface OwnerLayoutProps {
   navigate: (s: Screen) => void
@@ -134,10 +135,11 @@ export default function OwnerLayout({ navigate, currentScreen, user, bookings, s
         {/* Bottom section */}
         <div className="p-4 border-t border-gray-700/50 space-y-2">
           <div className="flex items-center gap-3 px-3 py-2">
-            <img
-              src={user?.avatar || 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=80&h=80&fit=crop&auto=format'}
-              alt="Owner"
-              className="w-9 h-9 rounded-full object-cover"
+            <Avatar
+              src={user?.avatar}
+              name={user?.name || 'เจ้าของร้าน'}
+              className="w-9 h-9 rounded-full"
+              textClassName="text-xs"
             />
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium text-white truncate">{user?.name || 'เจ้าของร้าน'}</p>

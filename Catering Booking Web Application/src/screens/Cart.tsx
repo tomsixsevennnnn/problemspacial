@@ -95,7 +95,6 @@ export default function Cart({
                   { icon: Clock, label: 'ช่วงเวลา', value: booking.timeSlot || '-' },
                   { icon: MapPin, label: 'สถานที่จัดงาน', value: booking.location ? booking.location.name : '-' },
                   { icon: Users, label: 'จำนวนโต๊ะ', value: `${booking.tables} โต๊ะ (${booking.tables * 10} ที่นั่ง)` },
-                  { icon: Users, label: 'จำนวนคนที่ร่วมงาน', value: `${booking.guestCount} คน` },
                   { icon: Package, label: 'แพ็กเกจ', value: booking.packageName || '-' },
                 ].map(({ icon: Icon, label, value }) => (
                   <div key={label} className="flex items-start gap-3 p-3 bg-gray-50 rounded-xl">

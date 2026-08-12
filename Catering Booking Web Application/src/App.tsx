@@ -67,7 +67,6 @@ const initialBooking: BookingData = {
   date: null,
   timeSlot: null,
   tables: 2,
-  guestCount: 20,
   location: null,
   packageId: null,
   packageName: null,
@@ -75,8 +74,6 @@ const initialBooking: BookingData = {
   menuLimit: 9,
   selectedMenus: [],
 }
-
-const DEFAULT_AVATAR = 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=80&h=80&fit=crop&auto=format'
 
 export default function App() {
   const { isAuthenticated, isLoading, user: auth0User, logout, getAccessTokenSilently } = useAuth0()
@@ -142,14 +139,21 @@ export default function App() {
         setSettings(sttgs)
         setDataLoaded(true)
       } catch (err) {
-        if (!cancelled) setLoadError(err instanceof Error ? err.message : 'โหลดข้อมูลไม่สำเร็จ')
+        if (cancelled) return
+        const message = err instanceof Error ? err.message : ''
+        // refresh token หมดอายุ/ถูกเพิกถอน — retry ซ้ำไม่มีทางสำเร็จ ต้องพากลับไป login ใหม่เท่านั้น
+        if (/refresh token/i.test(message)) {
+          logout({ logoutParams: { returnTo: window.location.origin } })
+          return
+        }
+        setLoadError(message || 'โหลดข้อมูลไม่สำเร็จ')
       }
     }
     load()
     return () => {
       cancelled = true
     }
-  }, [isAuthenticated, getAccessTokenSilently, auth0User, retryKey])
+  }, [isAuthenticated, getAccessTokenSilently, auth0User, retryKey, logout])
 
   /** poll ค่าตั้งค่าร้านทุก 20 วินาที — ให้ทุกเครื่องเห็นการแก้ไข (เช่น ชื่อร้าน) โดยอัตโนมัติ ไม่ต้องกด refresh เอง
    *  หยุด poll เมื่อสลับไปแท็บ/แอปอื่น (document.hidden) กันยิง request เปล่าๆ ตอนไม่มีใครดูอยู่ */
@@ -293,7 +297,7 @@ export default function App() {
         phone: backendUser.phone,
         lineId: backendUser.lineId,
         email: backendUser.email,
-        avatar: backendUser.avatar || DEFAULT_AVATAR,
+        avatar: backendUser.avatar,
       }
     : null
 
@@ -369,7 +373,6 @@ export default function App() {
         date: booking.date || new Date().toISOString().split('T')[0],
         timeSlot: booking.timeSlot || 'ทั้งวัน',
         tables: booking.tables,
-        guestCount: booking.guestCount,
         packageName: booking.packageName || 'Standard',
         totalPrice: subtotal + deliveryFee,
         pricePerTable: booking.packagePrice,

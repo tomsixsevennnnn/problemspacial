@@ -435,7 +435,7 @@ Presentational: ถ้า `item.image` มีค่า → แสดงรูป
 
 | DTO | Field และกฎ |
 |---|---|
-| `CreateBookingDto` | `date: string`, `timeSlot: string`, `tables: int ≥1`, `guestCount: int ≥1`, `packageName: string`, `totalPrice: int ≥0`, `pricePerTable?: int`, `deliveryFee?: int`, `location: string`, `locationDetail?: unknown` (ไม่ validate โครงสร้างภายใน), `menus: string[]` |
+| `CreateBookingDto` | `date: string`, `timeSlot: string`, `tables: int ≥1`, `packageName: string`, `totalPrice: int ≥0`, `pricePerTable?: int`, `deliveryFee?: int`, `location: string`, `locationDetail?: unknown` (ไม่ validate โครงสร้างภายใน), `menus: string[]` |
 | `UpdateBookingDto` | `status?: BookingStatus` (enum: PENDING/CONFIRMED/COMPLETED/CANCELLED), `staffActual?: unknown`, `staffNote?: string` — ทุก field optional |
 | `UpdatePaymentSlipDto` | (ไม่ได้เปิดอ่านในรอบนี้ แต่ใช้ใน controller เป็น `{ paymentSlipUrl: string }`) |
 | `UpdateProfileDto` | field โปรไฟล์ optional (เบอร์โทร/Line ฯลฯ) |

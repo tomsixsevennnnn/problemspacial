@@ -206,7 +206,6 @@ export default function CalendarView({ bookings, onUpdateBooking }: CalendarView
                 { label: 'วันที่', value: new Date(popup.date + 'T00:00:00').toLocaleDateString('th-TH', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }) },
                 { label: 'ช่วงเวลา', value: popup.timeSlot },
                 { label: 'จำนวนโต๊ะ', value: `${popup.tables} โต๊ะ` },
-                { label: 'ผู้ร่วมงาน', value: `${popup.guestCount ?? popup.tables * 10} คน` },
                 { label: 'แพ็กเกจ', value: popup.packageName },
                 { label: 'สถานที่', value: popup.location },
                 { label: 'ราคารวม', value: `฿${popup.totalPrice.toLocaleString()}` },

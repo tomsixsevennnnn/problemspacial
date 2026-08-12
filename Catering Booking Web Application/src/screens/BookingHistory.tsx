@@ -310,7 +310,7 @@ export default function BookingHistory({ navigate, user, notifCount, bookings, o
             <div className="bg-gradient-to-r from-orange-500 to-amber-500 p-6 flex items-center justify-between sticky top-0">
               <div>
                 <h3 className="text-lg font-bold text-white">รายละเอียดการจอง</h3>
-                <p className="text-orange-100 text-sm">{detailBooking.id}</p>
+                <p className="text-orange-100 text-sm">{docNumber(detailBooking, 'booking')}</p>
               </div>
               <button
                 onClick={closeDetail}
@@ -325,7 +325,6 @@ export default function BookingHistory({ navigate, user, notifCount, bookings, o
                 { label: 'วันที่', value: new Date(detailBooking.date + 'T00:00:00').toLocaleDateString('th-TH', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }) },
                 { label: 'ช่วงเวลา', value: detailBooking.timeSlot },
                 { label: 'จำนวนโต๊ะ', value: `${detailBooking.tables} โต๊ะ` },
-                { label: 'จำนวนคนที่ร่วมงาน', value: `${detailBooking.guestCount ?? detailBooking.tables * 10} คน` },
                 { label: 'แพ็กเกจ', value: detailBooking.packageName },
                 { label: 'สถานที่', value: detailBooking.location },
                 { label: 'เบอร์โทร', value: detailBooking.phone },

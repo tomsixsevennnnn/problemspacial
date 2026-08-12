@@ -1,5 +1,6 @@
 import { Bell, Calendar, ChefHat, Home, LogOut, User } from 'lucide-react'
 import type { Screen, UserProfile } from '../types'
+import Avatar from './Avatar'
 
 interface NavbarProps {
   navigate: (s: Screen) => void
@@ -69,11 +70,7 @@ export default function Navbar({ navigate, currentScreen, user, notifCount, shop
 
             {user && (
               <div className="flex items-center gap-2 pl-2 border-l border-gray-100">
-                <img
-                  src={user.avatar}
-                  alt={user.name}
-                  className="w-8 h-8 rounded-full object-cover"
-                />
+                <Avatar src={user.avatar} name={user.name} className="w-8 h-8 rounded-full" textClassName="text-xs" />
                 <span className="hidden sm:block text-sm font-medium text-gray-700">{user.name}</span>
               </div>
             )}

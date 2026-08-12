@@ -85,7 +85,6 @@ model Booking {
   date                  String
   timeSlot              String
   tables                Int
-  guestCount            Int
   packageName           String
   totalPrice            Int
   pricePerTable         Int?

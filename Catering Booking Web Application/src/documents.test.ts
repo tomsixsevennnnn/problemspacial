@@ -11,7 +11,6 @@ const makeBooking = (overrides: Partial<Booking>): Booking => ({
   date: '2026-01-15',
   timeSlot: 'เย็น (17:00-21:00)',
   tables: 5,
-  guestCount: 50,
   packageName: 'โต๊ะจีน 3,000',
   totalPrice: 17000,
   status: 'pending',

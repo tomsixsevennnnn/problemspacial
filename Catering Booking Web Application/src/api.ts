@@ -167,7 +167,6 @@ export interface CreateBookingInput {
   date: string
   timeSlot: string
   tables: number
-  guestCount: number
   packageName: string
   totalPrice: number
   pricePerTable?: number

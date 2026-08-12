@@ -1,4 +1,4 @@
-import { ChevronLeft, ChevronRight, Minus, Plus, Users } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Minus, Plus } from 'lucide-react'
 import Navbar from '../components/Navbar'
 import type { Screen, UserProfile } from '../types'
 import { HOME_PROVINCE } from '../geo'
@@ -17,8 +17,6 @@ interface SelectTableProps {
 }
 
 export default function SelectTable({ navigate, user, notifCount, shopName, tables, onSetTables, date, timeSlot, deliveryFee, freeDeliveryMinTables }: SelectTableProps) {
-  const totalGuests = tables * 10
-
   const handleTableInput = (value: string) => {
     const parsed = Number(value)
     if (Number.isNaN(parsed)) return
@@ -94,22 +92,12 @@ export default function SelectTable({ navigate, user, notifCount, shopName, tabl
           <div className="border-t border-dashed border-gray-200 my-6" />
 
           {/* Summary */}
-          <div className="grid grid-cols-2 gap-4">
-            <div className="bg-gray-50 rounded-2xl p-4 text-center">
-              <div className="flex items-center justify-center gap-1.5 mb-1">
-                <span className="text-gray-400 text-xs">จำนวนโต๊ะ</span>
-              </div>
-              <p className="text-2xl font-bold text-gray-900">{tables}</p>
-              <p className="text-xs text-gray-400">โต๊ะ</p>
+          <div className="bg-gray-50 rounded-2xl p-4 text-center">
+            <div className="flex items-center justify-center gap-1.5 mb-1">
+              <span className="text-gray-400 text-xs">จำนวนโต๊ะ</span>
             </div>
-            <div className="bg-orange-50 rounded-2xl p-4 text-center">
-              <div className="flex items-center justify-center gap-1.5 mb-1">
-                <Users size={12} className="text-orange-400" />
-                <span className="text-orange-400 text-xs">รองรับผู้เข้าร่วม</span>
-              </div>
-              <p className="text-2xl font-bold text-orange-600">{totalGuests}</p>
-              <p className="text-xs text-orange-400">ที่นั่ง</p>
-            </div>
+            <p className="text-2xl font-bold text-gray-900">{tables}</p>
+            <p className="text-xs text-gray-400">โต๊ะ</p>
           </div>
           {/* เงื่อนไขพื้นที่ — ตรวจจริงอีกครั้งในขั้นตอนเลือกสถานที่ */}
           <div

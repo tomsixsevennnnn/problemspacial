@@ -45,7 +45,6 @@ export class BookingsService {
           date: dto.date,
           timeSlot: dto.timeSlot,
           tables: dto.tables,
-          guestCount: dto.guestCount,
           packageName: dto.packageName,
           totalPrice: dto.totalPrice,
           pricePerTable: dto.pricePerTable,
