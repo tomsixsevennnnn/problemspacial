@@ -190,6 +190,12 @@ export interface ShopInfo {
   address: string
   phone: string
   line: string
+  /** ข้อมูลบัญชีธนาคารสำหรับโอนมัดจำ — แสดงในใบเสนอราคา/ใบจอง */
+  bankName: string
+  bankAccountNumber: string
+  bankAccountName: string
+  /** รูป QR พร้อมเพย์ (data URL) — '' แปลว่ายังไม่ได้อัปโหลด */
+  promptPayQr: string
 }
 
 /** ค่าตั้งค่าของร้านที่เจ้าของร้านแก้ไขได้จากหน้า "ตั้งค่า" */

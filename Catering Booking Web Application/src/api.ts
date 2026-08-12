@@ -54,6 +54,10 @@ interface BackendSettings {
   shopAddress: string
   shopPhone: string
   shopLine: string
+  bankName: string
+  bankAccountNumber: string
+  bankAccountName: string
+  promptPayQr?: string | null
   depositRate: number
   deliveryFee: number
   freeDeliveryMinTables: number
@@ -75,6 +79,10 @@ const toFrontendSettings = (s: BackendSettings): AppSettings => ({
     address: s.shopAddress,
     phone: s.shopPhone,
     line: s.shopLine,
+    bankName: s.bankName ?? '',
+    bankAccountNumber: s.bankAccountNumber ?? '',
+    bankAccountName: s.bankAccountName ?? '',
+    promptPayQr: s.promptPayQr ?? '',
   },
   depositRate: s.depositRate,
   deliveryFee: s.deliveryFee,
@@ -105,6 +113,11 @@ const toFrontendShopInfo = (s: BackendPublicShopInfo): ShopInfo => ({
   address: s.shopAddress,
   phone: s.shopPhone,
   line: s.shopLine,
+  // endpoint สาธารณะ (ก่อน login) ไม่ส่งข้อมูลบัญชี — ใช้แค่ตั้งชื่อแท็บ ไม่ได้เอาไปออกเอกสาร
+  bankName: '',
+  bankAccountNumber: '',
+  bankAccountName: '',
+  promptPayQr: '',
 })
 
 const toBackendSettingsPatch = (patch: Partial<AppSettings>): Record<string, unknown> => {
@@ -116,6 +129,10 @@ const toBackendSettingsPatch = (patch: Partial<AppSettings>): Record<string, unk
   if (si?.address !== undefined) out.shopAddress = si.address
   if (si?.phone !== undefined) out.shopPhone = si.phone
   if (si?.line !== undefined) out.shopLine = si.line
+  if (si?.bankName !== undefined) out.bankName = si.bankName
+  if (si?.bankAccountNumber !== undefined) out.bankAccountNumber = si.bankAccountNumber
+  if (si?.bankAccountName !== undefined) out.bankAccountName = si.bankAccountName
+  if (si?.promptPayQr !== undefined) out.promptPayQr = si.promptPayQr
   if (patch.depositRate !== undefined) out.depositRate = patch.depositRate
   if (patch.deliveryFee !== undefined) out.deliveryFee = patch.deliveryFee
   if (patch.freeDeliveryMinTables !== undefined) out.freeDeliveryMinTables = patch.freeDeliveryMinTables

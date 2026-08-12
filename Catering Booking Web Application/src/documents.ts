@@ -8,6 +8,10 @@ export const DEFAULT_SHOP_INFO: ShopInfo = {
   address: 'อ.เมืองนครปฐม จ.นครปฐม 73000',
   phone: '034-XXX-XXX',
   line: '@pipatphochana',
+  bankName: '',
+  bankAccountNumber: '',
+  bankAccountName: '',
+  promptPayQr: '',
 }
 
 /** จำชื่อร้านล่าสุดไว้ใน localStorage เพื่อให้หน้า Login (ก่อน login ยังดึงจาก backend ไม่ได้) แสดงชื่อที่ถูกต้อง */

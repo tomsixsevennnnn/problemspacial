@@ -125,6 +125,12 @@ model Settings {
   shopAddress           String
   shopPhone             String
   shopLine              String
+  /** ข้อมูลบัญชีธนาคาร/พร้อมเพย์ให้ลูกค้าโอนมัดจำ — แสดงในใบเสนอราคา/ใบจอง */
+  bankName              String  @default("")
+  bankAccountNumber     String  @default("")
+  bankAccountName       String  @default("")
+  /** รูป QR พร้อมเพย์ (data URL) */
+  promptPayQr           String?
   /** 0–1 เช่น 0.5 = 50% */
   depositRate           Float
   deliveryFee           Int
