@@ -9,7 +9,6 @@ import {
   DEFAULT_FREE_DELIVERY_MIN_TABLES,
   DEFAULT_FUEL_COST_PER_KM,
   DEFAULT_SHOP_LOCATION,
-  deliveryFeeFor,
   formatFullAddress,
 } from './geo'
 import {
@@ -18,9 +17,9 @@ import {
   DEFAULT_WAGE_DISHWASHER,
   DEFAULT_WAGE_SERVER_PER_TABLE,
 } from './costing'
-import { roleFromAuth0User } from './auth'
-import { unreadNotificationCount } from './notifications'
-import { api, type BackendUser, type CreatePackageInput, type UpdatePackageInput } from './api'
+import { roleFromAuth0User, type AppRole } from './auth'
+import { DEFAULT_UNREAD_WINDOW_MS, unreadNotificationCount } from './notifications'
+import { api, type BackendUser, type CreatePackageInput, type UpdatePackageInput, type UploadKind } from './api'
 import ErrorBanner from './components/ErrorBanner'
 import Login from './screens/Login'
 import CompleteProfile from './screens/CompleteProfile'
@@ -40,14 +39,17 @@ import CalendarView from './screens/owner/CalendarView'
 import Packages from './screens/owner/Packages'
 import Menus from './screens/owner/Menus'
 import Documents from './screens/owner/Documents'
-import Customers from './screens/owner/Customers'
 import Reports from './screens/owner/Reports'
 import Settings from './screens/owner/Settings'
+import UserRoles from './screens/owner/UserRoles'
 
 const OWNER_SCREENS: Screen[] = [
   'owner-dashboard', 'owner-orders', 'owner-calendar', 'owner-packages', 'owner-menus', 'owner-documents',
-  'owner-customers', 'owner-reports', 'owner-settings',
+  'owner-reports', 'owner-users', 'owner-settings',
 ]
+
+/** เวลาที่ลูกค้าเปิดหน้า "การแจ้งเตือน" ล่าสุด — ใช้ตัดสินว่ารายการไหน "ยังไม่อ่าน" (เหมือน owner-notif-seen-at ฝั่งเจ้าของร้าน) */
+const NOTIF_SEEN_KEY = 'customer-notif-seen-at'
 
 const initialSettings: AppSettings = {
   shopInfo: DEFAULT_SHOP_INFO,
@@ -61,6 +63,8 @@ const initialSettings: AppSettings = {
   categoryOrder: DEFAULT_CATEGORY_ORDER,
   shopLocation: DEFAULT_SHOP_LOCATION,
   fuelCostPerKm: DEFAULT_FUEL_COST_PER_KM,
+  // ค่าเริ่มต้นก่อนโหลดจริงจาก backend — ตัวจริงจะมาแทนที่หลัง GET /settings เสมอ
+  version: 0,
 }
 
 const initialBooking: BookingData = {
@@ -95,6 +99,13 @@ export default function App() {
   const [retryKey, setRetryKey] = useState(0)
   // แจ้งเตือนลอยตอนทำรายการ (จอง/แก้แพ็กเกจ/แก้เมนู ฯลฯ) ไม่สำเร็จ — คนละเรื่องกับ loadError ที่บล็อกทั้งหน้า
   const [actionError, setActionError] = useState<string | null>(null)
+  // เวลาที่ลูกค้าเปิดหน้าแจ้งเตือนล่าสุด (ใช้กับตัวเลขที่กระดิ่ง) — ถ้ายังไม่เคยเปิดเลย ใช้ค่าเริ่มต้นย้อนหลัง 24 ชม.
+  const [notifSeenAt, setNotifSeenAt] = useState(
+    () => Number(localStorage.getItem(NOTIF_SEEN_KEY)) || Date.now() - DEFAULT_UNREAD_WINDOW_MS
+  )
+  // ค่า notifSeenAt "ก่อนหน้า" ที่ freeze ไว้ตอนเข้าหน้าแจ้งเตือนรอบนี้ — ใช้ตัดสินป้าย "ยังไม่อ่าน" รายรายการ
+  // ในหน้านั้นเอง (โชว์สิ่งที่ใหม่ตั้งแต่ครั้งก่อนที่เปิดดู) แยกจาก notifSeenAt ที่อัปเดตทันทีเพื่อให้ตัวเลขที่กระดิ่งหายทันที
+  const [notifPageSeenAt, setNotifPageSeenAt] = useState(notifSeenAt)
 
   /** ตั้งชื่อแท็บเบราว์เซอร์ให้ไวที่สุดตั้งแต่แอป mount — ใช้ endpoint สาธารณะ ไม่ต้องรอ login/โหลดข้อมูลครบชุดเหมือน settings ปกติ */
   useEffect(() => {
@@ -186,6 +197,37 @@ export default function App() {
 
   const withToken = () => getAccessTokenSilently()
 
+  /** อัปโหลดรูป (data URL ที่ย่อแล้วจาก pickImageAsDataUrl) ไปเก็บเป็นไฟล์บน backend — คืน URL สั้นๆ
+   *  ไม่ห่อด้วย runAction เพราะหน้าที่เรียก (Menus/Settings/BookingHistory) จัดการ error เองแบบ inline ใกล้ปุ่มอัปโหลดอยู่แล้ว */
+  const handleUploadImage = async (kind: UploadKind, dataUrl: string): Promise<string> => {
+    const token = await withToken()
+    return api.uploadImage(token, kind, dataUrl)
+  }
+
+  /** โหลดรายการจองทีละหน้า — ใช้เฉพาะหน้า Orders (owner) และ ประวัติการจอง (customer) ไม่ใช่ bookings state หลัก
+   *  ที่ Dashboard/Reports/Calendar/Documents ยังใช้ข้อมูลเต็มชุดตามเดิม */
+  const handleFetchBookingsPage = async (page: number, pageSize: number, search: string, status?: Booking['status']) => {
+    const token = await withToken()
+    return api.bookingsPage(token, page, pageSize, search, status)
+  }
+
+  /** owner ค้นหาผู้ใช้ที่เคย login แล้วด้วยอีเมล — ใช้ในหน้า "สิทธิ์การเข้าถึง" เพื่อเลื่อน/ถอดสิทธิ์ owner
+   *  ไม่ห่อด้วย runAction เพราะ UserRoles.tsx จัดการ error เองแบบ inline ใกล้ช่องค้นหา */
+  const handleSearchUsers = async (email: string) => {
+    const token = await withToken()
+    return api.searchUsersByEmail(token, email)
+  }
+
+  const handleSetUserRole = async (userId: string, role: 'OWNER' | 'CUSTOMER') => {
+    const token = await withToken()
+    await api.setUserRole(token, userId, role)
+  }
+
+  const handleListOwners = async () => {
+    const token = await withToken()
+    return api.listOwners(token)
+  }
+
   /** อัปเดตชื่อร้านบนแท็บเบราว์เซอร์ + จำไว้ใน localStorage ให้หน้า Login ใช้ได้ก่อน login */
   useEffect(() => {
     document.title = settings.shopInfo.name
@@ -212,7 +254,6 @@ export default function App() {
         category: item.category,
         description: item.description,
         image: item.image,
-        extraPrice: item.extraPrice,
         costPrice: item.costPrice,
         active: item.active,
       }
@@ -281,8 +322,17 @@ export default function App() {
     }
   }
 
-  /** เข้าเว็บด้วย role จาก Auth0 (customer = Google, owner = username/password) ดู src/auth.ts */
-  const role = roleFromAuth0User(auth0User as Record<string, unknown> | undefined)
+  /**
+   * role จริงต้องมาจาก backendUser.role (DB) ไม่ใช่ claim จาก Auth0 ตรงๆ — เพราะ owner จัดการ role ของคนอื่นเองได้
+   * ผ่านหน้า "สิทธิ์การเข้าถึง" แล้ว (เช่น เลื่อนคนที่ login ด้วย Google ให้เป็น owner) ถ้ายังอ่านจาก claim อย่างเดียว
+   * คนที่เพิ่งถูกเลื่อนจะยังเข้าหน้า owner ไม่ได้ทั้งที่ backend ยอมให้เรียก API แบบ owner แล้ว
+   * ใช้ claim (roleFromAuth0User) เป็นแค่ fallback ช่วงก่อน backendUser โหลดเสร็จเท่านั้น (เสี้ยววินาทีแรกหลัง login)
+   */
+  const role: AppRole = backendUser
+    ? backendUser.role === 'OWNER'
+      ? 'owner'
+      : 'customer'
+    : roleFromAuth0User(auth0User as Record<string, unknown> | undefined)
   /** โปรไฟล์ยังไม่ครบ (ชื่อ/นามสกุล/เบอร์โทร) — เช็คทุกครั้งที่ login ไม่ใช่แค่ครั้งแรก เผื่อกรอกไม่ครบหรือ Google ไม่มีนามสกุลให้ */
   const needsProfile =
     isAuthenticated &&
@@ -307,6 +357,14 @@ export default function App() {
       logout({ logoutParams: { returnTo: window.location.origin } })
       return
     }
+    // เปิดหน้าแจ้งเตือน — freeze cutoff เดิมไว้ให้หน้านั้นโชว์ว่ารายการไหน "ใหม่ตั้งแต่ครั้งก่อน" ระหว่างที่ดูอยู่รอบนี้
+    // ส่วนตัวเลขที่กระดิ่ง (notifSeenAt) อัปเดตเป็นตอนนี้ทันที ให้หายจากหน้าอื่นๆ ทันทีที่กดเข้ามาดู
+    if (s === 'notifications') {
+      setNotifPageSeenAt(notifSeenAt)
+      const now = Date.now()
+      setNotifSeenAt(now)
+      localStorage.setItem(NOTIF_SEEN_KEY, String(now))
+    }
     setScreen(s)
   }
 
@@ -319,7 +377,7 @@ export default function App() {
       : screen
 
   // จำนวนแจ้งเตือนใหม่ (ใบจองที่มีความเคลื่อนไหวภายใน 24 ชม.) — โชว์เป็นตัวเลขที่ไอคอนกระดิ่งบน Navbar
-  const notifCount = unreadNotificationCount(bookings)
+  const notifCount = unreadNotificationCount(bookings, notifSeenAt)
 
   const handleSelectDateTime = (date: string, timeSlot: string) => {
     setBooking(b => ({ ...b, date, timeSlot }))
@@ -352,31 +410,33 @@ export default function App() {
   const handleUpdateSettings = (patch: Partial<AppSettings>) =>
     runAction(async () => {
       const token = await withToken()
-      const updated = await api.updateSettings(token, patch)
-      setSettings(updated)
+      try {
+        const updated = await api.updateSettings(token, patch)
+        setSettings(updated)
+      } catch (err) {
+        // 409 = มีคนแก้ไขค่าตั้งค่าไปแล้วก่อนหน้านี้ (อีกแท็บ/อีกคน) — โหลดค่าล่าสุดจาก backend มาแทนที่ค่าในหน้าจอ
+        // แทนที่จะทิ้งข้อความ error ดิบให้ผู้ใช้เห็น (มี version เดิมค้างอยู่ ไม่มีทาง save ซ้ำผ่านได้จนกว่าจะ refresh)
+        const message = err instanceof Error ? err.message : ''
+        if (/-> 409/.test(message)) {
+          const fresh = await api.settings(token)
+          setSettings(fresh)
+          throw new Error('มีการแก้ไขค่าตั้งค่าจากที่อื่นไปแล้ว ระบบโหลดค่าล่าสุดมาให้แล้ว กรุณาตรวจสอบและบันทึกใหม่อีกครั้ง')
+        }
+        throw err
+      }
     })
 
   const handleConfirm = () =>
     runAction(async () => {
-      // คิดยอดแบบเดียวกับหน้าตะกร้า เพื่อให้ใบเสนอราคา/ใบจองตรงกัน
-      const subtotal = booking.packagePrice * booking.tables
-      const deliveryFee = deliveryFeeFor(
-        booking.tables,
-        booking.location,
-        settings.deliveryFee,
-        settings.freeDeliveryMinTables,
-        settings.fuelCostPerKm,
-      )
-
+      // ราคาจริงคำนวณฝั่ง backend เสมอ (จาก Package + Settings ใน DB) กันแก้ raw request ปลอมราคา —
+      // ที่นี่ส่งแค่ข้อมูลที่ใช้ระบุ "จองอะไร/ที่ไหน" ไม่ส่งตัวเลขราคาที่คำนวณฝั่ง client ไปเลย
       const token = await withToken()
       const created = await api.createBooking(token, {
         date: booking.date || new Date().toISOString().split('T')[0],
         timeSlot: booking.timeSlot || 'ทั้งวัน',
         tables: booking.tables,
+        packageId: booking.packageId ?? '',
         packageName: booking.packageName || 'Standard',
-        totalPrice: subtotal + deliveryFee,
-        pricePerTable: booking.packagePrice,
-        deliveryFee,
         location: booking.location ? formatFullAddress(booking.location) : 'ไม่ระบุ',
         locationDetail: booking.location ?? undefined,
         menus: booking.selectedMenus.map(m => m.name),
@@ -481,7 +541,13 @@ export default function App() {
           <Dashboard bookings={bookings} menus={menus} settings={settings} />
         )}
         {effectiveScreen === 'owner-orders' && (
-          <Orders bookings={bookings} menus={menus} settings={settings} onUpdateBooking={handleUpdateBooking} />
+          <Orders
+            bookings={bookings}
+            menus={menus}
+            settings={settings}
+            onUpdateBooking={handleUpdateBooking}
+            onFetchBookingsPage={handleFetchBookingsPage}
+          />
         )}
         {effectiveScreen === 'owner-calendar' && (
           <CalendarView bookings={bookings} onUpdateBooking={handleUpdateBooking} />
@@ -504,19 +570,25 @@ export default function App() {
             settings={settings}
             onSaveMenu={handleSaveMenu}
             onDeleteMenu={handleDeleteMenu}
+            onUploadImage={handleUploadImage}
           />
         )}
         {effectiveScreen === 'owner-documents' && (
           <Documents bookings={bookings} menus={menus} settings={settings} />
         )}
-        {effectiveScreen === 'owner-customers' && (
-          <Customers bookings={bookings} menus={menus} settings={settings} />
-        )}
         {effectiveScreen === 'owner-reports' && (
           <Reports bookings={bookings} menus={menus} settings={settings} />
         )}
+        {effectiveScreen === 'owner-users' && (
+          <UserRoles
+            onSearchUser={handleSearchUsers}
+            onSetRole={handleSetUserRole}
+            onListOwners={handleListOwners}
+            currentAuth0Sub={backendUser?.auth0Sub}
+          />
+        )}
         {effectiveScreen === 'owner-settings' && (
-          <Settings settings={settings} onUpdateSettings={handleUpdateSettings} />
+          <Settings settings={settings} onUpdateSettings={handleUpdateSettings} onUploadImage={handleUploadImage} />
         )}
       </OwnerLayout>
     )
@@ -624,11 +696,19 @@ export default function App() {
           notifCount={notifCount}
           bookings={bookings}
           onUpdateBooking={handleUpdateBooking}
+          onUploadImage={handleUploadImage}
           settings={settings}
         />
       )}
       {effectiveScreen === 'notifications' && (
-        <Notifications navigate={navigate} user={user} notifCount={notifCount} bookings={bookings} shopName={settings.shopInfo.name} />
+        <Notifications
+          navigate={navigate}
+          user={user}
+          notifCount={notifCount}
+          bookings={bookings}
+          shopName={settings.shopInfo.name}
+          notifSeenAt={notifPageSeenAt}
+        />
       )}
     </>
   )

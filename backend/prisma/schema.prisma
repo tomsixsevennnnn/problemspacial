@@ -39,10 +39,11 @@ model MenuItem {
   category    String
   description String          @default("")
   image       String?
-  extraPrice  Int?
   /** ราคาทุนต่อจาน (บาท) — เจ้าของร้านกรอกตรงๆ ไม่คำนวณจากวัตถุดิบ */
   costPrice   Int?
   active      Boolean         @default(true)
+  /** soft delete — ไม่ลบแถวจริง กันข้อมูลใน booking เก่าที่อ้างเมนูนี้อยู่หาย + เก็บไว้ตรวจสอบย้อนหลังได้ (ดู audit) */
+  deletedAt   DateTime?
   courses     PackageCourse[] @relation("CourseItems")
 }
 
@@ -56,7 +57,10 @@ model Package {
   badge         String?
   /** ลำดับการแสดงในหน้าจัดการแพ็กเกจ — เจ้าของร้านลากจัดเรียงเอง */
   sortOrder     Int             @default(0)
+  /** soft delete — ไม่ลบแถวจริง กันใบจองเก่าที่อ้างแพ็กเกจนี้ (packageId) หาย + เก็บไว้ตรวจสอบย้อนหลังได้ (ดู audit) */
+  deletedAt     DateTime?
   courses       PackageCourse[]
+  bookings      Booking[]
 }
 
 model PackageCourse {
@@ -85,6 +89,8 @@ model Booking {
   date                  String
   timeSlot              String
   tables                Int
+  package               Package?      @relation(fields: [packageId], references: [id], onDelete: SetNull)
+  packageId             String?
   packageName           String
   totalPrice            Int
   pricePerTable         Int?
@@ -108,12 +114,34 @@ model Booking {
   @@unique([bookingYear, bookingNo])
   @@index([customerId])
   @@index([date])
+  /** orderBy: createdAt desc ใช้ทุกครั้งที่ list booking (เต็มชุดและ paginate) — กัน sequential scan ตอนข้อมูลเยอะขึ้น */
+  @@index([createdAt])
 }
 
 /** ตัวนับเลขที่ใบจองแยกตามปี — แถวละ 1 ปี เพิ่มค่า lastNo แบบ atomic ตอนสร้างใบจองใหม่ */
 model BookingCounter {
   year   Int @id
   lastNo Int @default(0)
+}
+
+/**
+ * ประวัติการแก้ไข/ลบข้อมูลสำคัญโดย owner — ลบเมนู/แพ็กเกจ (soft delete) และแก้ไข booking (สถานะ/แผนกำลังคน)
+ * เก็บ before/after ไว้ตรวจสอบย้อนหลังได้ว่าใครแก้อะไรเมื่อไหร่ (ดู audit.service.ts)
+ */
+model AuditLog {
+  id          String   @id @default(cuid())
+  actorUserId String
+  actorRole   Role
+  /** เช่น "menu.delete", "package.delete", "booking.update" */
+  action      String
+  entityType  String
+  entityId    String
+  before      Json?
+  after       Json?
+  createdAt   DateTime @default(now())
+
+  @@index([entityType, entityId])
+  @@index([createdAt])
 }
 
 /** ตั้งใจให้มีแถวเดียวเสมอ (id = 1) เก็บค่าตั้งค่าร้าน */
@@ -148,4 +176,7 @@ model Settings {
   shopLocationLng        Float  @default(100.0603)
   /** ค่าน้ำมัน (บาท/กิโลเมตร) — คูณระยะทางไป-กลับคำนวณค่าเดินทางงานนอกพื้นที่ */
   fuelCostPerKm          Float  @default(8)
+  /** optimistic concurrency — ป้องกันสองแท็บ/สองคนแก้ค่าตั้งค่าพร้อมกันแล้วทับกันเงียบๆ (ดู settings.service.ts) */
+  version                Int    @default(1)
+  updatedAt              DateTime @default(now()) @updatedAt
 }

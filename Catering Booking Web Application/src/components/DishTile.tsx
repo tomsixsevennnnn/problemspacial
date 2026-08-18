@@ -1,5 +1,6 @@
 import type { MenuItem } from '../types'
 import { CATEGORY_MAP } from '../data'
+import { resolveAssetUrl } from '../api'
 
 interface DishTileProps {
   item: MenuItem
@@ -23,7 +24,7 @@ export default function DishTile({ item, category, emojiClass = 'text-4xl', clas
         : undefined
     return (
       <img
-        src={item.image}
+        src={resolveAssetUrl(item.image)}
         alt={item.name}
         draggable={false}
         className={`w-full h-full object-cover ${className}`}

@@ -21,10 +21,12 @@ import type { AppSettings } from '../../types'
 import { orderedCategories } from '../../data'
 import LocationMap from '../../components/LocationMap'
 import { pickImageAsDataUrl } from '../../imageUpload'
+import { resolveAssetUrl, type UploadKind } from '../../api'
 
 interface SettingsProps {
   settings: AppSettings
   onUpdateSettings: (patch: Partial<AppSettings>) => void
+  onUploadImage: (kind: UploadKind, dataUrl: string) => Promise<string>
 }
 
 const SHOP_FIELDS: { key: keyof AppSettings['shopInfo']; label: string; placeholder: string }[] = [
@@ -48,7 +50,7 @@ const WAGE_FIELDS: { key: 'wageChef' | 'wageAssistant' | 'wageServerPerTable' | 
   { key: 'wageDishwasher', label: 'ค่าแรงพนักงานล้างจาน', unit: 'บาท/คน/งาน' },
 ]
 
-export default function Settings({ settings, onUpdateSettings }: SettingsProps) {
+export default function Settings({ settings, onUpdateSettings, onUploadImage }: SettingsProps) {
   const [form, setForm] = useState<AppSettings>(settings)
   const [savedAt, setSavedAt] = useState<number | null>(null)
   const [locating, setLocating] = useState(false)
@@ -66,6 +68,13 @@ export default function Settings({ settings, onUpdateSettings }: SettingsProps) 
     setForm(f => (JSON.stringify(f) === JSON.stringify(prevSettings) ? settings : f))
   }, [settings])
 
+  // sync แค่ version เข้า form เสมอ แม้กำลังแก้ไขค้างอยู่ (dirty) — ไม่งั้นถ้าเจอ save ชนกัน (409) แล้ว backend
+  // ส่ง settings ใหม่มาแทนที่ ตัว form (ซึ่งมีข้อมูลที่แก้ค้างอยู่ ไม่ได้ถูกแทนที่ทั้งก้อนตาม effect ด้านบน)
+  // จะยังถือ version เก่าอยู่ กด save ซ้ำครั้งที่สองจะชนอีกไม่จบไม่สิ้น
+  useEffect(() => {
+    setForm(f => (f.version === settings.version ? f : { ...f, version: settings.version }))
+  }, [settings.version])
+
   const dirty = JSON.stringify(form) !== JSON.stringify(settings)
 
   const setShopField = (key: keyof AppSettings['shopInfo'], value: string) => {
@@ -73,14 +82,15 @@ export default function Settings({ settings, onUpdateSettings }: SettingsProps) 
     setSavedAt(null)
   }
 
-  /** เลือกรูป QR พร้อมเพย์จากเครื่อง — ย่อขนาดแล้วเก็บเป็น data URL เหมือนรูปเมนู */
+  /** เลือกรูป QR พร้อมเพย์จากเครื่อง — ย่อขนาดแล้วอัปโหลดขึ้น backend เก็บเป็นไฟล์ทันที */
   const handlePickQr = async (file: File | undefined) => {
     if (!file) return
     setQrUploading(true)
     setQrError(null)
     try {
       const dataUrl = await pickImageAsDataUrl(file)
-      setShopField('promptPayQr', dataUrl)
+      const url = await onUploadImage('promptpay-qr', dataUrl)
+      setShopField('promptPayQr', url)
     } catch (err) {
       setQrError(err instanceof Error ? err.message : 'อัปโหลดรูปไม่สำเร็จ')
     } finally {
@@ -253,7 +263,7 @@ export default function Settings({ settings, onUpdateSettings }: SettingsProps) 
           {form.shopInfo.promptPayQr ? (
             <div className="flex items-center gap-4">
               <img
-                src={form.shopInfo.promptPayQr}
+                src={resolveAssetUrl(form.shopInfo.promptPayQr)}
                 alt="QR พร้อมเพย์"
                 className="w-28 h-28 rounded-xl border border-gray-200 object-contain bg-white"
               />

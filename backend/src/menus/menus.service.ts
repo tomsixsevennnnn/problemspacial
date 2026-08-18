@@ -1,12 +1,18 @@
-import { Injectable } from '@nestjs/common'
+import { Injectable, NotFoundException } from '@nestjs/common'
 import type { MenuItem } from '@prisma/client'
+import { AuditService } from '../audit/audit.service'
 import { PrismaService } from '../prisma/prisma.service'
+import { UploadsService } from '../uploads/uploads.service'
 import { CreateMenuItemDto } from './dto/create-menu-item.dto'
 import { UpdateMenuItemDto } from './dto/update-menu-item.dto'
 
 @Injectable()
 export class MenusService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private audit: AuditService,
+    private uploads: UploadsService,
+  ) {}
 
   /** cache รายการเมนูไว้ในหน่วยความจำ — DB จริงอยู่ที่ Railway แต่ละ query กิน ~300-800ms (ดู settings.service.ts)
    *  เมนูแก้ไขน้อย (เฉพาะเจ้าของร้าน) ทุก mutation ในไฟล์นี้จึงล้าง cache ทันทีอยู่แล้ว ไม่ต้องรอ TTL
@@ -17,7 +23,7 @@ export class MenusService {
 
   async findAll(): Promise<MenuItem[]> {
     if (this.cached && Date.now() - this.cachedAt < this.CACHE_TTL_MS) return this.cached
-    const menus = await this.prisma.menuItem.findMany({ orderBy: { name: 'asc' } })
+    const menus = await this.prisma.menuItem.findMany({ where: { deletedAt: null }, orderBy: { name: 'asc' } })
     this.cached = menus
     this.cachedAt = Date.now()
     return menus
@@ -32,14 +38,27 @@ export class MenusService {
     return this.prisma.menuItem.create({ data: dto })
   }
 
-  update(id: string, dto: UpdateMenuItemDto) {
+  /** ถ้าเปลี่ยนรูป (dto.image เป็นค่าใหม่ที่ต่างจากเดิม) ลบไฟล์รูปเก่าทิ้งหลัง update สำเร็จ กันไฟล์ orphan ค้าง disk */
+  async update(id: string, dto: UpdateMenuItemDto) {
     this.invalidate()
-    return this.prisma.menuItem.update({ where: { id }, data: dto })
+    const before = dto.image !== undefined ? await this.prisma.menuItem.findUnique({ where: { id } }) : null
+
+    const after = await this.prisma.menuItem.update({ where: { id }, data: dto })
+
+    if (before && before.image && before.image !== after.image) {
+      await this.uploads.deleteManagedFile(before.image)
+    }
+    return after
   }
 
-  /** ลบเมนู — จะหลุดออกจากทุก course ที่อ้างถึงโดยอัตโนมัติ (many-to-many) */
-  remove(id: string) {
+  /** soft delete — ยังอยู่ใน course เดิมที่อ้างถึง (ประวัติ booking เก่าไม่พัง) แค่ซ่อนจากรายการเมนูปกติ */
+  async remove(auth0Sub: string, id: string) {
     this.invalidate()
-    return this.prisma.menuItem.delete({ where: { id } })
+    const before = await this.prisma.menuItem.findUnique({ where: { id } })
+    if (!before) throw new NotFoundException('ไม่พบเมนูนี้')
+
+    const after = await this.prisma.menuItem.update({ where: { id }, data: { deletedAt: new Date() } })
+    await this.audit.log(auth0Sub, 'menu.delete', 'MenuItem', id, before, after)
+    return after
   }
 }

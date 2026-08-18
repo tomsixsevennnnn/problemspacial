@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Calendar, ChevronLeft, Clock, MapPin, Package, Pencil, ShoppingBag, Users, X } from 'lucide-react'
+import { Calendar, ChevronLeft, Clock, Loader2, MapPin, Package, Pencil, ShoppingBag, Users, X } from 'lucide-react'
 import Navbar from '../components/Navbar'
 import DishTile from '../components/DishTile'
 import LocationMap from '../components/LocationMap'
@@ -15,7 +15,7 @@ interface CartProps {
   isOwnerPreview: boolean
   packages: PackageType[]
   booking: BookingData
-  onConfirm: () => void
+  onConfirm: () => Promise<void>
   deliveryFee: number
   freeDeliveryMinTables: number
   fuelCostPerKm: number
@@ -36,6 +36,8 @@ export default function Cart({
 }: CartProps) {
   const [showConfirm, setShowConfirm] = useState(false)
   const [ownerBlocked, setOwnerBlocked] = useState(false)
+  /** กำลังส่งคำขอจองไป backend อยู่ — บล็อกปุ่มซ้ำ + โชว์สถานะ "กำลังจอง" ก่อนพาไปหน้าประวัติ กันหน้าประวัติแสดงรายการเก่าโผล่มาก่อนแวบหนึ่งเพราะยังจองไม่เสร็จจริง */
+  const [submitting, setSubmitting] = useState(false)
   const pkg = packages.find(p => p.id === booking.packageId) ?? null
   /** จับคู่เมนูที่เลือกกับ "ข้อ" ของแพ็กเกจ เพื่อแสดงตามลำดับเสิร์ฟ */
   const courseOf = (menuId: string) => pkg?.courses.find(c => c.items.some(i => i.id === menuId)) ?? null
@@ -48,18 +50,25 @@ export default function Cart({
       : `ค่าขนส่ง (นอก${HOME_PROVINCE} ไม่ถึง ${freeDeliveryMinTables} โต๊ะ)`
 
   const closeConfirm = () => {
+    if (submitting) return
     setShowConfirm(false)
     setOwnerBlocked(false)
   }
 
-  const handleConfirm = () => {
+  const handleConfirm = async () => {
     if (isOwnerPreview) {
       setOwnerBlocked(true)
       return
     }
-    closeConfirm()
-    onConfirm()
-    navigate('history')
+    setSubmitting(true)
+    try {
+      // รอให้ backend สร้างใบจองจริงและอัปเดต state เสร็จก่อน ค่อยพาไปหน้าประวัติ
+      // กันหน้าประวัติแสดงผลตอนที่ใบจองใหม่ยังไม่เข้า state (ทำให้ดูเหมือนระบบช้า/รายการหาย)
+      await onConfirm()
+      navigate('history')
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   return (
@@ -195,9 +204,6 @@ export default function Cart({
                             )}
                           </p>
                           <p className="text-xs font-semibold text-gray-800 truncate">{menu.name}</p>
-                          {menu.extraPrice && (
-                            <p className="text-[10px] text-orange-500">+{menu.extraPrice} บาท</p>
-                          )}
                         </div>
                       </div>
                     )
@@ -259,14 +265,15 @@ export default function Cart({
 
       {/* Confirmation Modal */}
       {showConfirm && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden">
             <div className="bg-gradient-to-r from-orange-500 to-amber-500 p-6">
               <div className="flex items-center justify-between">
                 <h3 className="text-lg font-bold text-white">ยืนยันการจอง</h3>
                 <button
                   onClick={closeConfirm}
-                  className="w-8 h-8 bg-white/20 hover:bg-white/30 rounded-xl flex items-center justify-center text-white transition-colors"
+                  disabled={submitting}
+                  className="w-8 h-8 bg-white/20 hover:bg-white/30 disabled:opacity-40 rounded-xl flex items-center justify-center text-white transition-colors"
                 >
                   <X size={16} />
                 </button>
@@ -274,48 +281,58 @@ export default function Cart({
             </div>
 
             <div className="p-6">
-              {ownerBlocked && (
-                <div className="bg-red-50 border border-red-100 text-red-600 text-sm rounded-2xl p-4 mb-4 leading-relaxed">
-                  ไม่สามารถจองได้ เพราะคุณคือเจ้าของร้าน — "มุมมองลูกค้า" มีไว้ดูตัวอย่างหน้าจอเท่านั้น ต้อง login ด้วยบัญชีลูกค้าจริงเพื่อจอง
+              {submitting ? (
+                <div className="flex flex-col items-center justify-center gap-3 py-8">
+                  <Loader2 size={32} className="text-orange-500 animate-spin" />
+                  <p className="font-semibold text-gray-800">กำลังบันทึกการจอง...</p>
+                  <p className="text-xs text-gray-400 text-center">กรุณารอสักครู่ ระบบกำลังส่งข้อมูลการจองของคุณ</p>
                 </div>
-              )}
-              <div className="space-y-3 mb-6">
-                {[
-                  { label: 'วันที่', value: booking.date ? new Date(booking.date + 'T00:00:00').toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' }) : '-' },
-                  { label: 'เวลา', value: booking.timeSlot || '-' },
-                  { label: 'สถานที่', value: booking.location?.name || '-' },
-                  { label: 'จำนวนโต๊ะ', value: `${booking.tables} โต๊ะ` },
-                  { label: 'แพ็กเกจ', value: booking.packageName || '-' },
-                  { label: 'จำนวนอาหาร', value: `${booking.selectedMenus.length} อย่าง / โต๊ะ` },
-                ].map(({ label, value }) => (
-                  <div key={label} className="flex justify-between text-sm">
-                    <span className="text-gray-400">{label}</span>
-                    <span className="font-medium text-gray-800 text-right max-w-[60%]">{value}</span>
+              ) : (
+                <>
+                  {ownerBlocked && (
+                    <div className="bg-red-50 border border-red-100 text-red-600 text-sm rounded-2xl p-4 mb-4 leading-relaxed">
+                      ไม่สามารถจองได้ เพราะคุณคือเจ้าของร้าน — "มุมมองลูกค้า" มีไว้ดูตัวอย่างหน้าจอเท่านั้น ต้อง login ด้วยบัญชีลูกค้าจริงเพื่อจอง
+                    </div>
+                  )}
+                  <div className="space-y-3 mb-6">
+                    {[
+                      { label: 'วันที่', value: booking.date ? new Date(booking.date + 'T00:00:00').toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' }) : '-' },
+                      { label: 'เวลา', value: booking.timeSlot || '-' },
+                      { label: 'สถานที่', value: booking.location?.name || '-' },
+                      { label: 'จำนวนโต๊ะ', value: `${booking.tables} โต๊ะ` },
+                      { label: 'แพ็กเกจ', value: booking.packageName || '-' },
+                      { label: 'จำนวนอาหาร', value: `${booking.selectedMenus.length} อย่าง / โต๊ะ` },
+                    ].map(({ label, value }) => (
+                      <div key={label} className="flex justify-between text-sm">
+                        <span className="text-gray-400">{label}</span>
+                        <span className="font-medium text-gray-800 text-right max-w-[60%]">{value}</span>
+                      </div>
+                    ))}
+                    <div className="h-px bg-gray-100" />
+                    <div className="flex justify-between">
+                      <span className="font-bold text-gray-900">ราคารวม</span>
+                      <span className="font-bold text-orange-500 text-lg">{total.toLocaleString()} ฿</span>
+                    </div>
                   </div>
-                ))}
-                <div className="h-px bg-gray-100" />
-                <div className="flex justify-between">
-                  <span className="font-bold text-gray-900">ราคารวม</span>
-                  <span className="font-bold text-orange-500 text-lg">{total.toLocaleString()} ฿</span>
-                </div>
-              </div>
 
-              <div className="flex gap-3">
-                <button
-                  onClick={closeConfirm}
-                  className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-2xl py-3.5 font-semibold transition-colors"
-                >
-                  ยกเลิก
-                </button>
-                {!ownerBlocked && (
-                  <button
-                    onClick={handleConfirm}
-                    className="flex-1 bg-orange-500 hover:bg-orange-600 text-white rounded-2xl py-3.5 font-semibold transition-all shadow-lg shadow-orange-200"
-                  >
-                    ยืนยันการจอง
-                  </button>
-                )}
-              </div>
+                  <div className="flex gap-3">
+                    <button
+                      onClick={closeConfirm}
+                      className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-2xl py-3.5 font-semibold transition-colors"
+                    >
+                      ยกเลิก
+                    </button>
+                    {!ownerBlocked && (
+                      <button
+                        onClick={handleConfirm}
+                        className="flex-1 bg-orange-500 hover:bg-orange-600 text-white rounded-2xl py-3.5 font-semibold transition-all shadow-lg shadow-orange-200"
+                      >
+                        ยืนยันการจอง
+                      </button>
+                    )}
+                  </div>
+                </>
+              )}
             </div>
           </div>
         </div>

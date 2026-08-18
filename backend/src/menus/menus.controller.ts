@@ -1,4 +1,5 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards } from '@nestjs/common'
+import { CurrentUser } from '../auth/current-user.decorator'
 import { JwtAuthGuard } from '../auth/jwt-auth.guard'
 import { Roles } from '../auth/roles.decorator'
 import { RolesGuard } from '../auth/roles.guard'
@@ -30,7 +31,7 @@ export class MenusController {
 
   @Delete(':id')
   @Roles('owner')
-  remove(@Param('id') id: string) {
-    return this.menus.remove(id)
+  remove(@CurrentUser() jwtUser: Record<string, any>, @Param('id') id: string) {
+    return this.menus.remove(jwtUser.sub, id)
   }
 }

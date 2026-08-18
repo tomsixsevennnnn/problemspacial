@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common'
 import type { Package, PackageCourse, MenuItem } from '@prisma/client'
+import { AuditService } from '../audit/audit.service'
 import { PrismaService } from '../prisma/prisma.service'
 import { CourseInput, CreatePackageDto } from './dto/create-package.dto'
 import { UpdateCourseDto } from './dto/update-course.dto'
@@ -7,9 +8,44 @@ import { UpdatePackageDto } from './dto/update-package.dto'
 
 type PackageWithCourses = Package & { courses: (PackageCourse & { items: MenuItem[] })[] }
 
+/**
+ * เทียบว่า courses ที่ส่งมาเหมือนของเดิมทุกอย่างไหม (ข้อ, ชื่อ, ไอคอน, ประเภท, จำนวนที่เลือก, รายการเมนู)
+ * ใช้ตัดสินว่าต้องทำ delete-then-recreate ทั้งชุดจริงไหม — เพราะฟอร์มแก้ไขฝั่ง frontend (owner/Packages.tsx)
+ * ส่ง courses มาด้วยทุกครั้งที่บันทึกอยู่แล้ว ไม่ว่าจะแก้แค่ชื่อ/ราคาแพ็กเกจหรือแก้ courses จริงๆ ก็ตาม
+ * ถ้าไม่เช็คก่อน ทุกครั้งที่ owner แก้แค่ราคาก็จะโดนลบ+สร้าง course/เมนูใหม่ทั้งชุดโดยไม่จำเป็น ซึ่งเป็น nested
+ * write หลาย round-trip บน DB ที่อยู่ไกล (Railway) ช้าเป็นวินาที — ทั้งที่ข้อมูล courses ไม่ได้เปลี่ยนเลย
+ */
+function coursesUnchanged(existing: (PackageCourse & { items: MenuItem[] })[], incoming: CourseInput[]): boolean {
+  if (existing.length !== incoming.length) return false
+
+  const byNo = [...existing].sort((a, b) => a.no - b.no)
+  const incomingByNo = [...incoming].sort((a, b) => a.no - b.no)
+
+  return byNo.every((course, i) => {
+    const next = incomingByNo[i]
+    if (
+      course.no !== next.no ||
+      course.title !== next.title ||
+      (course.icon ?? '') !== (next.icon ?? '') ||
+      course.category !== next.category ||
+      course.choose !== next.choose
+    ) {
+      return false
+    }
+    const existingIds = new Set(course.items.map((item) => item.id))
+    const incomingIds = new Set(next.itemIds)
+    if (existingIds.size !== incomingIds.size) return false
+    for (const id of existingIds) if (!incomingIds.has(id)) return false
+    return true
+  })
+}
+
 @Injectable()
 export class PackagesService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private audit: AuditService,
+  ) {}
 
   /** cache รายการแพ็กเกจไว้ในหน่วยความจำ — DB จริงอยู่ที่ Railway (ดู settings.service.ts) แต่ query นี้แพงเป็นพิเศษ
    *  เพราะ include courses.items ซ้อนกัน ทำให้ Prisma ยิงหลาย round trip ต่อเนื่องกัน (วัดจริงได้ ~2.5-3s ต่อครั้ง
@@ -23,8 +59,14 @@ export class PackagesService {
   async findAll(): Promise<PackageWithCourses[]> {
     if (this.cached && Date.now() - this.cachedAt < this.CACHE_TTL_MS) return this.cached
     const packages = await this.prisma.package.findMany({
+      where: { deletedAt: null },
       orderBy: { sortOrder: 'asc' },
-      include: { courses: { include: { items: true }, orderBy: { no: 'asc' } } },
+      include: {
+        courses: {
+          include: { items: { where: { deletedAt: null } } },
+          orderBy: { no: 'asc' },
+        },
+      },
     })
     this.cached = packages
     this.cachedAt = Date.now()
@@ -36,7 +78,7 @@ export class PackagesService {
   }
 
   async create(dto: CreatePackageDto) {
-    const count = await this.prisma.package.count()
+    const count = await this.prisma.package.count({ where: { deletedAt: null } })
     this.invalidate()
     return this.prisma.package.create({
       data: {
@@ -78,37 +120,70 @@ export class PackagesService {
       })
     }
 
-    // ส่ง courses มา = แทนที่ทุกข้อทั้งชุด (ลบของเดิมแล้วสร้างใหม่ในทรานแซกชันเดียว)
-    return this.prisma.$transaction(async (tx) => {
-      await tx.packageCourse.deleteMany({ where: { packageId: id } })
-      return tx.package.update({
+    // ฟอร์มแก้ไขฝั่ง frontend ส่ง courses มาด้วยทุกครั้งที่บันทึก ไม่ว่าจะแก้แค่ชื่อ/ราคาหรือแก้ courses จริงๆ
+    // เช็คก่อนว่า courses เปลี่ยนจริงไหม — ถ้าไม่เปลี่ยนก็อัปเดตแค่ field ระดับบนแบบเดียวกับตอนไม่ส่ง courses มา
+    // (round trip เดียว เร็วเท่าแก้ field ธรรมดา) ไม่ต้องเสีย delete+recreate ทั้งชุดโดยไม่จำเป็น
+    const current = await this.prisma.package.findUnique({
+      where: { id },
+      include: { courses: { include: { items: true }, orderBy: { no: 'asc' } } },
+    })
+    if (current && coursesUnchanged(current.courses, dto.courses)) {
+      return this.prisma.package.update({
         where: { id },
         data: {
           name: dto.name,
           pricePerTable: dto.pricePerTable,
-          menuLimit: dto.menuLimit ?? dto.courses!.length,
+          menuLimit: dto.menuLimit,
           description: dto.description,
           features: dto.features,
           badge: dto.badge,
-          courses: {
-            create: dto.courses!.map((c) => ({
-              no: c.no,
-              title: c.title,
-              icon: c.icon,
-              category: c.category,
-              choose: c.choose,
-              items: { connect: c.itemIds.map((itemId) => ({ id: itemId })) },
-            })),
-          },
         },
         include: { courses: { include: { items: true } } },
       })
-    })
+    }
+
+    // courses เปลี่ยนจริง — แทนที่ทุกข้อทั้งชุด (ลบของเดิมแล้วสร้างใหม่ในทรานแซกชันเดียว)
+    // nested create หลายข้อ × connect หลายเมนู/ข้อ กลายเป็นหลาย round trip ต่อเนื่องกัน — ค่า timeout เริ่มต้นของ
+    // Prisma (5000ms) ไม่พอเมื่อ DB อยู่ไกล (เช่น dev เครื่องนี้ชี้ไป Railway ผ่าน public proxy) เลยยืดให้พอ
+    return this.prisma.$transaction(
+      async (tx) => {
+        await tx.packageCourse.deleteMany({ where: { packageId: id } })
+        return tx.package.update({
+          where: { id },
+          data: {
+            name: dto.name,
+            pricePerTable: dto.pricePerTable,
+            menuLimit: dto.menuLimit ?? dto.courses!.length,
+            description: dto.description,
+            features: dto.features,
+            badge: dto.badge,
+            courses: {
+              create: dto.courses!.map((c) => ({
+                no: c.no,
+                title: c.title,
+                icon: c.icon,
+                category: c.category,
+                choose: c.choose,
+                items: { connect: c.itemIds.map((itemId) => ({ id: itemId })) },
+              })),
+            },
+          },
+          include: { courses: { include: { items: true } } },
+        })
+      },
+      { timeout: 20_000 },
+    )
   }
 
-  remove(id: string) {
+  /** soft delete — booking เก่าที่อ้าง packageId นี้ยังอ่านราคาพื้นฐานย้อนหลังได้ (แค่ซ่อนจากรายการแพ็กเกจปกติ) */
+  async remove(auth0Sub: string, id: string) {
     this.invalidate()
-    return this.prisma.package.delete({ where: { id } })
+    const before = await this.prisma.package.findUnique({ where: { id } })
+    if (!before) throw new NotFoundException('ไม่พบแพ็กเกจนี้')
+
+    const after = await this.prisma.package.update({ where: { id }, data: { deletedAt: new Date() } })
+    await this.audit.log(auth0Sub, 'package.delete', 'Package', id, before, after)
+    return after
   }
 
   /** เจ้าของร้านลากจัดลำดับแพ็กเกจใหม่ — รับ id ทุกแพ็กเกจเรียงตามลำดับที่ต้องการ */

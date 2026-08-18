@@ -108,7 +108,7 @@ export default function Login() {
             disabled={isLoading}
             className="w-full text-center text-xs text-gray-400 hover:text-gray-600 transition-colors disabled:opacity-50"
           >
-            เข้าระบบในฐานะเจ้าของร้าน
+            เข้าระบบด้วยรหัสผ่าน
           </button>
         </div>
       </div>

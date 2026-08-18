@@ -1,4 +1,5 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards } from '@nestjs/common'
+import { CurrentUser } from '../auth/current-user.decorator'
 import { JwtAuthGuard } from '../auth/jwt-auth.guard'
 import { Roles } from '../auth/roles.decorator'
 import { RolesGuard } from '../auth/roles.guard'
@@ -39,8 +40,8 @@ export class PackagesController {
 
   @Delete(':id')
   @Roles('owner')
-  remove(@Param('id') id: string) {
-    return this.packages.remove(id)
+  remove(@CurrentUser() jwtUser: Record<string, any>, @Param('id') id: string) {
+    return this.packages.remove(jwtUser.sub, id)
   }
 
   /** เพิ่ม/แก้/ลบทีละข้อในแพ็กเกจ — ทางเลือกแทนการส่ง courses ทั้งชุดผ่าน PATCH /packages/:id */

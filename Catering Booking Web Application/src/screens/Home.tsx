@@ -1,7 +1,7 @@
 import { ArrowRight, CheckCircle, ChevronRight, Clock, MapPin, Users } from 'lucide-react'
 import Navbar from '../components/Navbar'
 import type { Screen, UserProfile } from '../types'
-import heroImage1 from '../img/content1.png'
+import heroImage1 from '../img/content1.webp'
 
 interface HomeProps {
   navigate: (s: Screen) => void
@@ -18,13 +18,15 @@ const STEPS = [
   { icon: '✅', title: 'ยืนยันการจอง', desc: 'ตรวจสอบและยืนยันการจองทั้งหมด' },
 ]
 
+// q=70 (คุณภาพลดจาก default 75 แบบแทบไม่เห็นผลต่างที่ขนาดจอแสดงจริง) ลดขนาดไฟล์ลงได้พอสมควร
+// auto=format ให้ CDN เลือกส่ง AVIF/WebP เองตาม Accept header ของเบราว์เซอร์อยู่แล้ว
 const GALLERY = [
-  'https://images.unsplash.com/photo-1555244162-803834f70033?w=600&h=400&fit=crop&auto=format',
-  'https://images.unsplash.com/photo-1414235077428-338989a2e8c0?w=600&h=400&fit=crop&auto=format',
-  'https://images.unsplash.com/photo-1530554764233-e79e16c91d08?w=600&h=400&fit=crop&auto=format',
-  'https://images.unsplash.com/photo-1504674900247-0877df9cc836?w=600&h=400&fit=crop&auto=format',
-  'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=600&h=400&fit=crop&auto=format',
-  'https://images.unsplash.com/photo-1559339352-11d035aa65de?w=600&h=400&fit=crop&auto=format',
+  'https://images.unsplash.com/photo-1555244162-803834f70033?w=600&h=400&fit=crop&auto=format&q=70',
+  'https://images.unsplash.com/photo-1414235077428-338989a2e8c0?w=600&h=400&fit=crop&auto=format&q=70',
+  'https://images.unsplash.com/photo-1530554764233-e79e16c91d08?w=600&h=400&fit=crop&auto=format&q=70',
+  'https://images.unsplash.com/photo-1504674900247-0877df9cc836?w=600&h=400&fit=crop&auto=format&q=70',
+  'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=600&h=400&fit=crop&auto=format&q=70',
+  'https://images.unsplash.com/photo-1559339352-11d035aa65de?w=600&h=400&fit=crop&auto=format&q=70',
 ]
 
 export default function Home({ navigate, user, notifCount, shopName }: HomeProps) {
@@ -39,6 +41,7 @@ export default function Home({ navigate, user, notifCount, shopName }: HomeProps
             src={heroImage1}
             alt="บริการจัดเลี้ยง"
             className="w-full h-full object-cover"
+            fetchPriority="high"
           />
           <div className="absolute inset-0 bg-gradient-to-r from-gray-900/85 via-gray-900/60 to-transparent" />
 
@@ -136,6 +139,11 @@ export default function Home({ navigate, user, notifCount, shopName }: HomeProps
                 <img
                   src={url}
                   alt={`งานตัวอย่าง ${i + 1}`}
+                  width={600}
+                  height={400}
+                  // รูปแรก 2 รูปมักอยู่ในหรือใกล้ viewport แรกที่เห็นแล้ว (ต่อจาก hero) โหลดทันทีแทนที่จะรอ lazy
+                  loading={i < 2 ? 'eager' : 'lazy'}
+                  decoding="async"
                   className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                 />
               </div>

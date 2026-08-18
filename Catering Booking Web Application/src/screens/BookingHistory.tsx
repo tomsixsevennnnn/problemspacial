@@ -5,6 +5,7 @@ import BookingDocument from '../components/BookingDocument'
 import type { AppSettings, Booking, Screen, UserProfile } from '../types'
 import { DOC_LABEL, bookingPricing, docNumber, type DocType } from '../documents'
 import { pickImageAsDataUrl } from '../imageUpload'
+import { resolveAssetUrl, type UploadKind } from '../api'
 
 interface BookingHistoryProps {
   navigate: (s: Screen) => void
@@ -12,6 +13,7 @@ interface BookingHistoryProps {
   notifCount: number
   bookings: Booking[]
   onUpdateBooking: (id: string, patch: Partial<Booking>) => void
+  onUploadImage: (kind: UploadKind, dataUrl: string) => Promise<string>
   settings: AppSettings
 }
 
@@ -22,7 +24,15 @@ const STATUS_CONFIG = {
   cancelled: { label: 'ยกเลิก', bg: 'bg-red-100', text: 'text-red-600', dot: 'bg-red-400' },
 }
 
-export default function BookingHistory({ navigate, user, notifCount, bookings, onUpdateBooking, settings }: BookingHistoryProps) {
+export default function BookingHistory({
+  navigate,
+  user,
+  notifCount,
+  bookings,
+  onUpdateBooking,
+  onUploadImage,
+  settings,
+}: BookingHistoryProps) {
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('all')
   const [detailId, setDetailId] = useState<string | null>(null)
@@ -67,17 +77,31 @@ export default function BookingHistory({ navigate, user, notifCount, bookings, o
     }
   }
 
-  /** กดส่งจริง — ค่อยบันทึกสลิปเข้าใบจองให้ร้านเห็น */
-  const submitSlip = () => {
+  /** กดส่งจริง — อัปโหลดรูปขึ้น backend เก็บเป็นไฟล์ก่อน (ไม่อัปตอนเลือกรูป กันอัปรูปที่สุดท้ายไม่ได้ส่งทิ้งเปล่าๆ)
+   *  แล้วค่อยบันทึก URL ที่ได้เข้าใบจองให้ร้านเห็น */
+  const submitSlip = async () => {
     if (!slipDraft) return
-    onUpdateBooking(slipDraft.id, { paymentSlip: slipDraft.dataUrl, paymentSlipUploadedAt: new Date().toISOString() })
-    setSlipDraft(null)
-    setSlipSent(true)
+    setUploadingSlip(true)
+    setSlipError(null)
+    try {
+      const url = await onUploadImage('payment-slip', slipDraft.dataUrl)
+      onUpdateBooking(slipDraft.id, { paymentSlip: url, paymentSlipUploadedAt: new Date().toISOString() })
+      setSlipDraft(null)
+      setSlipSent(true)
+    } catch (err) {
+      setSlipError(err instanceof Error ? err.message : 'ส่งสลิปไม่สำเร็จ กรุณาลองใหม่')
+    } finally {
+      setUploadingSlip(false)
+    }
   }
 
+  // กรองฝั่ง client ทันที ไม่ยิง request — bookings ของลูกค้าคนเดียวโหลดมาครบชุดอยู่แล้ว (ใช้ร่วมกับหน้ารายละเอียด/
+  // แจ้งเตือนด้วย) จำนวนน้อยพอที่กรองในเครื่องได้ทันที ไม่ต้องรอ round-trip ไป backend ทุกครั้งที่กดปุ่มสถานะ/พิมพ์ค้นหา
   const filtered = allBookings.filter(b => {
-    const matchSearch = docNumber(b, 'booking').toLowerCase().includes(search.toLowerCase()) ||
-      b.customerName.includes(search) || search === ''
+    const matchSearch =
+      search === '' ||
+      docNumber(b, 'booking').toLowerCase().includes(search.toLowerCase()) ||
+      b.customerName.includes(search)
     const matchStatus = statusFilter === 'all' || b.status === statusFilter
     return matchSearch && matchStatus
   })
@@ -250,9 +274,12 @@ export default function BookingHistory({ navigate, user, notifCount, bookings, o
         </div>
       </div>
 
-      {/* Document viewer — ใบเสนอราคา / ใบจอง */}
+      {/* Document viewer — ใบเสนอราคา / ใบจอง
+          หมายเหตุ: จงใจไม่ใช้ backdrop-blur ตรงนี้ — blur เต็มจอ (fixed inset-0) ที่ครอบเนื้อหาซึ่งเลื่อนได้ (BookingDocument
+          ยาวเกิน viewport) ทำให้เบราว์เซอร์ต้องคำนวณ blur ใหม่ทุกเฟรมตอนเลื่อน หน่วงมากโดยเฉพาะเครื่องแรงไม่พอ —
+          ใช้พื้นทึบเข้มขึ้นแทนเพื่อความคมชัด/perf ที่ดีกว่า */}
       {docBooking && docView && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-start sm:items-center justify-center p-2 sm:p-4 overflow-y-auto">
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-start sm:items-center justify-center p-2 sm:p-4 overflow-y-auto">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl my-auto overflow-hidden print-area">
             {/* Toolbar */}
             <div className="no-print flex items-center justify-between gap-3 px-4 sm:px-6 py-3 bg-gray-50 border-b border-gray-100 sticky top-0">
@@ -303,9 +330,9 @@ export default function BookingHistory({ navigate, user, notifCount, bookings, o
         </div>
       )}
 
-      {/* Detail Modal */}
+      {/* Detail Modal — ไม่ใช้ backdrop-blur เหมือนกัน (ดูเหตุผลที่ document viewer ด้านบน) กันเลื่อนหน่วง */}
       {detailBooking && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md max-h-[80vh] overflow-y-auto">
             <div className="bg-gradient-to-r from-orange-500 to-amber-500 p-6 flex items-center justify-between sticky top-0">
               <div>
@@ -372,7 +399,7 @@ export default function BookingHistory({ navigate, user, notifCount, bookings, o
                     )}
                     {settings.shopInfo.promptPayQr && (
                       <img
-                        src={settings.shopInfo.promptPayQr}
+                        src={resolveAssetUrl(settings.shopInfo.promptPayQr)}
                         alt="QR พร้อมเพย์"
                         className="w-32 h-32 rounded-lg border border-gray-200 object-contain bg-white flex-shrink-0"
                       />
@@ -404,10 +431,11 @@ export default function BookingHistory({ navigate, user, notifCount, bookings, o
                     <div className="flex gap-2">
                       <button
                         onClick={submitSlip}
-                        className="flex-1 flex items-center justify-center gap-1.5 bg-orange-500 hover:bg-orange-600 text-white rounded-xl py-2 text-xs font-semibold transition-colors"
+                        disabled={uploadingSlip}
+                        className="flex-1 flex items-center justify-center gap-1.5 bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-white rounded-xl py-2 text-xs font-semibold transition-colors"
                       >
-                        <Send size={12} />
-                        ส่งสลิป
+                        {uploadingSlip ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />}
+                        {uploadingSlip ? 'กำลังส่ง...' : 'ส่งสลิป'}
                       </button>
                       <button
                         onClick={() => slipInputRef.current?.click()}
@@ -421,7 +449,7 @@ export default function BookingHistory({ navigate, user, notifCount, bookings, o
                 ) : detailBooking.paymentSlip ? (
                   <div className="space-y-2">
                     <img
-                      src={detailBooking.paymentSlip}
+                      src={resolveAssetUrl(detailBooking.paymentSlip)}
                       alt="สลิปโอนเงิน"
                       className="w-full max-h-64 object-contain rounded-xl border border-gray-200 bg-gray-50"
                     />

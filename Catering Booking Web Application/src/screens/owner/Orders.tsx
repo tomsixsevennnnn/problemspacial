@@ -1,6 +1,21 @@
-import { useState } from 'react'
-import { Check, MapPin, Minus, Navigation, Plus, RotateCcw, Save, Search, Users, X } from 'lucide-react'
+import { useCallback, useEffect, useState } from 'react'
+import {
+  Check,
+  ChevronLeft,
+  ChevronRight,
+  Loader2,
+  MapPin,
+  Minus,
+  Navigation,
+  Plus,
+  RotateCcw,
+  Save,
+  Search,
+  Users,
+  X,
+} from 'lucide-react'
 import LocationMap from '../../components/LocationMap'
+import { resolveAssetUrl, type BookingsPage } from '../../api'
 import type { AppSettings, Booking, MenuItem, StaffPlan } from '../../types'
 import { STAFF_ROLES, calculateStaff, isSamePlan, sumStaff, toPlan } from '../../staffing'
 import { bookingCostSummary } from '../../costing'
@@ -13,31 +28,63 @@ const STATUS_CONFIG = {
   cancelled: { label: 'ยกเลิก', bg: 'bg-red-100', text: 'text-red-600', dot: 'bg-red-400' },
 }
 
+const PAGE_SIZE = 20
+
 interface OrdersProps {
   bookings: Booking[]
   menus: MenuItem[]
   settings: AppSettings
   onUpdateBooking: (id: string, patch: Partial<Booking>) => void
+  onFetchBookingsPage: (page: number, pageSize: number, search: string) => Promise<BookingsPage>
 }
 
-export default function Orders({ bookings, menus, settings, onUpdateBooking }: OrdersProps) {
+export default function Orders({ bookings, menus, settings, onUpdateBooking, onFetchBookingsPage }: OrdersProps) {
   const [search, setSearch] = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
+  const [page, setPage] = useState(1)
+  const [pageData, setPageData] = useState<{ items: Booking[]; total: number } | null>(null)
+  const [loadingPage, setLoadingPage] = useState(false)
+  const [pageError, setPageError] = useState<string | null>(null)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [staffDraft, setStaffDraft] = useState<StaffPlan | null>(null)
   const [noteDraft, setNoteDraft] = useState('')
   const [slipZoom, setSlipZoom] = useState<string | null>(null)
 
-  // อ่านจาก bookings ตรง ๆ เพื่อให้แผงขวาอัปเดตตามทันทีที่ข้อมูลเปลี่ยน
+  // อ่านจาก bookings ตรง ๆ เพื่อให้แผงขวาอัปเดตตามทันทีที่ข้อมูลเปลี่ยน (bookings ยังโหลดเต็มชุดเหมือนเดิม
+  // เพราะ Dashboard/Reports/Calendar/Documents ยังต้องใช้ — เฉพาะตารางรายการที่นี่ที่ paginate แยกจากมัน)
   const selected = selectedId ? bookings.find(b => b.id === selectedId) ?? null : null
 
-  const filtered = bookings.filter(b =>
-    b.customerName.includes(search) ||
-    docNumber(b, 'booking').toLowerCase().includes(search.toLowerCase()) ||
-    search === ''
-  )
+  // debounce ช่องค้นหา 300ms กันยิง request รัวๆ ทุกตัวอักษรที่พิมพ์
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(search), 300)
+    return () => clearTimeout(timer)
+  }, [search])
+
+  // เปลี่ยนคำค้นหา = กลับไปหน้า 1 เสมอ กันค้างอยู่หน้าที่ไม่มีผลลัพธ์แล้ว
+  useEffect(() => {
+    setPage(1)
+  }, [debouncedSearch])
+
+  const loadPage = useCallback(() => {
+    setLoadingPage(true)
+    setPageError(null)
+    onFetchBookingsPage(page, PAGE_SIZE, debouncedSearch)
+      .then(res => setPageData({ items: res.items, total: res.total }))
+      .catch(err => setPageError(err instanceof Error ? err.message : 'โหลดรายการไม่สำเร็จ'))
+      .finally(() => setLoadingPage(false))
+  }, [page, debouncedSearch, onFetchBookingsPage])
+
+  useEffect(() => {
+    loadPage()
+  }, [loadPage])
+
+  const filtered = pageData?.items ?? []
+  const totalPages = pageData ? Math.max(1, Math.ceil(pageData.total / PAGE_SIZE)) : 1
 
   const updateStatus = (id: string, status: Booking['status']) => {
     onUpdateBooking(id, { status })
+    // อัปเดตแถวในตารางทันที ไม่ต้องรอ refetch — เห็นผลไวและกันสถานะเก่าค้างจนกว่าจะเปลี่ยนหน้า/ค้นหาใหม่
+    setPageData(pd => (pd ? { ...pd, items: pd.items.map(b => (b.id === id ? { ...b, status } : b)) } : pd))
   }
 
   /* --- แผนกำลังคน ------------------------------------------------- */
@@ -148,6 +195,39 @@ export default function Orders({ bookings, menus, settings, onUpdateBooking }: O
               })}
             </tbody>
           </table>
+
+          {loadingPage && (
+            <div className="flex items-center justify-center gap-2 py-6 text-sm text-gray-400">
+              <Loader2 size={16} className="animate-spin" />
+              กำลังโหลด...
+            </div>
+          )}
+          {!loadingPage && pageError && <div className="text-center py-6 text-sm text-red-500">{pageError}</div>}
+          {!loadingPage && !pageError && filtered.length === 0 && (
+            <div className="text-center py-10 text-gray-400 text-sm">ไม่พบรายการจอง</div>
+          )}
+          {!loadingPage && !pageError && pageData && pageData.total > 0 && (
+            <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100 text-xs text-gray-500">
+              <span>ทั้งหมด {pageData.total.toLocaleString()} รายการ</span>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setPage(p => Math.max(1, p - 1))}
+                  disabled={page <= 1}
+                  className="w-7 h-7 flex items-center justify-center rounded-lg border border-gray-200 disabled:opacity-40 hover:border-orange-300 transition-colors"
+                >
+                  <ChevronLeft size={14} />
+                </button>
+                <span>หน้า {page} / {totalPages}</span>
+                <button
+                  onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                  disabled={page >= totalPages}
+                  className="w-7 h-7 flex items-center justify-center rounded-lg border border-gray-200 disabled:opacity-40 hover:border-orange-300 transition-colors"
+                >
+                  <ChevronRight size={14} />
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* รายละเอียดใบจอง — แสดงเต็มจอแทนตาราง ไม่ใช่ side panel แต่จำกัดความกว้างไม่ให้ยืดเต็มจอกว้างเกินไป */}
@@ -410,7 +490,7 @@ export default function Orders({ bookings, menus, settings, onUpdateBooking }: O
                   <div className="space-y-2">
                     <button type="button" onClick={() => setSlipZoom(selected.paymentSlip!)} className="block w-full">
                       <img
-                        src={selected.paymentSlip}
+                        src={resolveAssetUrl(selected.paymentSlip)}
                         alt="สลิปโอนเงิน"
                         className="w-full max-h-64 object-contain rounded-xl border border-gray-200 bg-gray-50 hover:opacity-90 transition-opacity cursor-zoom-in"
                       />
@@ -475,7 +555,7 @@ export default function Orders({ bookings, menus, settings, onUpdateBooking }: O
             <X size={18} />
           </button>
           <img
-            src={slipZoom}
+            src={resolveAssetUrl(slipZoom)}
             alt="สลิปโอนเงิน (ขยาย)"
             className="max-w-full max-h-full object-contain rounded-xl"
             onClick={e => e.stopPropagation()}

@@ -1,8 +1,11 @@
 import 'reflect-metadata'
+import { mkdirSync } from 'fs'
 import { NestFactory } from '@nestjs/core'
 import { ValidationPipe } from '@nestjs/common'
 import { NestExpressApplication } from '@nestjs/platform-express'
+import helmet from 'helmet'
 import { AppModule } from './app.module'
+import { UPLOADS_DIR } from './uploads/uploads.constants'
 
 async function bootstrap() {
   // ปิด body parser เริ่มต้นเพื่อตั้ง limit เอง — สลิปโอนเงิน/รูปเมนูถูกส่งเป็น base64 data URL ใน JSON body
@@ -10,6 +13,13 @@ async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule, { bodyParser: false })
   app.useBodyParser('json', { limit: '10mb' })
   app.useBodyParser('urlencoded', { limit: '10mb', extended: true })
+
+  // crossOriginResourcePolicy ต้องเปิดเป็น cross-origin เพราะ frontend อยู่คนละ origin กับ backend
+  // (ไม่งั้น <img src> ที่ชี้มาที่ /uploads/... ของ backend จะโดน Helmet บล็อกไม่ให้โหลด)
+  app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }))
+
+  mkdirSync(UPLOADS_DIR, { recursive: true })
+  app.useStaticAssets(UPLOADS_DIR, { prefix: '/uploads/' })
 
   const origins = (process.env.FRONTEND_ORIGIN ?? 'http://localhost:8443').split(',').map((o) => o.trim())
   app.enableCors({ origin: origins, credentials: true })

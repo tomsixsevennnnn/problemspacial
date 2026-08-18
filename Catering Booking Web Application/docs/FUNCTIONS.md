@@ -30,7 +30,7 @@ title: "Function Specification (ละเอียด) — ระบบจอง
 | ฟังก์ชัน | รายละเอียด |
 |---|---|
 | `loginAsCustomer()` | เรียก `loginWithRedirect({ authorizationParams: { connection: 'google-oauth2' } })` ของ Auth0 SDK — บังคับ redirect ไปหน้า Google login |
-| `loginAsOwner()` | เรียก `loginWithRedirect({ authorizationParams: { connection: 'Username-Password-Authentication' } })` — ปุ่มลับท้ายหน้า ("เข้าระบบในฐานะเจ้าของร้าน") |
+| `loginAsOwner()` | เรียก `loginWithRedirect({ authorizationParams: { connection: 'Username-Password-Authentication' } })` — ปุ่มลับท้ายหน้า ("เข้าระบบด้วยรหัสผ่าน") |
 
 ปุ่มทั้งสองถูก disable ระหว่าง `isLoading` ของ Auth0 SDK เป็น true
 

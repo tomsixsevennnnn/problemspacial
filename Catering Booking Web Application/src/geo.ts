@@ -37,6 +37,10 @@ export const METRO_PROVINCES = [
   'กาญจนบุรี',
 ]
 
+// ⚠️ zoneFor/outsideDeliveryFeeFor ถูกพอร์ตไปซ้ำที่ backend/src/bookings/geo.util.ts เพราะ pricing.service.ts
+// ต้องคำนวณ zone/ค่าขนส่งเองฝั่ง server (ห้ามเชื่อ zone ที่ client ส่งมา — ดู code review ข้อ 1) แก้ตรงนี้แล้ว
+// ต้องไปแก้ regex/สูตรที่ backend ให้ตรงกันด้วยเสมอ ไม่งั้นราคาที่คำนวณจริงกับที่แสดงผลจะไม่ตรงกัน — มี parity
+// test คอยจับไว้ที่ backend/src/bookings/geo.util.spec.ts (เทสต์เคสเดียวกับไฟล์นี้) ถ้าแก้แล้วลืมอีกฝั่ง เทสต์จะ fail
 const HOME_PATTERN = /นครปฐม|nakhon ?pathom/i
 const METRO_PATTERN =
   /กรุงเทพ|กทม|bangkok|นนทบุรี|nonthaburi|ปทุมธานี|pathum ?thani|สมุทรปราการ|samut ?prakan|สมุทรสาคร|samut ?sakhon|สมุทรสงคราม|samut ?songkhram|สุพรรณบุรี|suphan ?buri|ราชบุรี|ratchaburi|กาญจนบุรี|kanchanaburi/i

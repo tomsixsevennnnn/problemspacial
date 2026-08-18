@@ -3,6 +3,16 @@ import { DEFAULT_CATEGORY_ORDER } from './data'
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:3000'
 
+/**
+ * รูปที่อัปโหลดผ่าน /uploads/* ถูกเก็บเป็น path สั้นๆ (เช่น "/uploads/menus/xxx.jpg") ต้องต่อ API_BASE เอง
+ * ถึงจะโหลดได้ — ต่างจากรูปเก่าที่ยังเป็น data URL เต็ม (ก่อนรันสคริปต์ย้ายข้อมูล) ซึ่งใช้ src ตรงๆ ได้อยู่แล้ว
+ */
+export const resolveAssetUrl = (path: string | null | undefined): string => {
+  if (!path) return ''
+  if (path.startsWith('/uploads/')) return `${API_BASE}${path}`
+  return path
+}
+
 async function request<T>(token: string, path: string, init: RequestInit = {}): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
     ...init,
@@ -69,6 +79,7 @@ interface BackendSettings {
   shopLocationLat: number
   shopLocationLng: number
   fuelCostPerKm: number
+  version: number
 }
 
 const toFrontendSettings = (s: BackendSettings): AppSettings => ({
@@ -95,6 +106,7 @@ const toFrontendSettings = (s: BackendSettings): AppSettings => ({
   categoryOrder: s.categoryOrder ?? DEFAULT_CATEGORY_ORDER,
   shopLocation: { lat: s.shopLocationLat, lng: s.shopLocationLng },
   fuelCostPerKm: s.fuelCostPerKm,
+  version: s.version,
 })
 
 interface BackendPublicShopInfo {
@@ -144,6 +156,8 @@ const toBackendSettingsPatch = (patch: Partial<AppSettings>): Record<string, unk
   if (patch.shopLocation?.lat !== undefined) out.shopLocationLat = patch.shopLocation.lat
   if (patch.shopLocation?.lng !== undefined) out.shopLocationLng = patch.shopLocation.lng
   if (patch.fuelCostPerKm !== undefined) out.fuelCostPerKm = patch.fuelCostPerKm
+  // ต้องส่งเสมอตอน PATCH จริง (ไม่ใช่ optional) — backend ใช้เช็คว่ามีคนอื่นแก้ค่าตั้งค่าไปก่อนหน้านี้หรือยัง
+  if (patch.version !== undefined) out.expectedVersion = patch.version
   return out
 }
 
@@ -157,6 +171,7 @@ export interface BackendUser {
   lineId: string
   email: string
   avatar: string
+  createdAt: string
 }
 
 export interface CourseInput {
@@ -184,14 +199,19 @@ export interface CreateBookingInput {
   date: string
   timeSlot: string
   tables: number
+  packageId: string
   packageName: string
-  totalPrice: number
-  pricePerTable?: number
-  deliveryFee?: number
   location: string
   locationDetail?: unknown
   menus: string[]
   lineId?: string
+}
+
+export interface BookingsPage {
+  items: Booking[]
+  total: number
+  page: number
+  pageSize: number
 }
 
 export interface SyncProfileInput {
@@ -201,6 +221,8 @@ export interface SyncProfileInput {
   avatar?: string
 }
 
+export type UploadKind = 'menu-image' | 'promptpay-qr' | 'payment-slip'
+
 export const api = {
   /** เรียกทันทีหลัง login — ส่ง profile จาก ID token ไปให้ backend เก็บ (access token ไม่มี name/email/picture) */
   syncProfile: (token: string, input: SyncProfileInput) =>
@@ -209,12 +231,47 @@ export const api = {
   updateProfile: (token: string, patch: { name?: string; surname?: string; phone?: string; lineId?: string }) =>
     request<BackendUser>(token, '/users/me', { method: 'PATCH', body: JSON.stringify(patch) }),
 
+  /** owner ค้นหาผู้ใช้ที่เคย login แล้วด้วยอีเมล เพื่อเลื่อน/ถอดสิทธิ์ owner — คืนหลาย row ได้ถ้าอีเมลเดียวกัน login คนละวิธี */
+  searchUsersByEmail: (token: string, email: string) =>
+    request<BackendUser[]>(token, `/users/search?email=${encodeURIComponent(email)}`),
+
+  /** รายชื่อ owner ทั้งหมดตอนนี้ — โชว์ในหน้า "สิทธิ์การเข้าถึง" */
+  listOwners: (token: string) => request<BackendUser[]>(token, '/users/owners'),
+
+  /** owner เลื่อน/ถอดสิทธิ์ owner ให้ user คนอื่น */
+  setUserRole: (token: string, userId: string, role: 'OWNER' | 'CUSTOMER') =>
+    request<BackendUser>(token, `/users/${userId}/role`, { method: 'PATCH', body: JSON.stringify({ role }) }),
+
+  /** อัปโหลดรูป (data URL จาก pickImageAsDataUrl) ไปเก็บเป็นไฟล์บน backend — คืน URL สั้นๆ เอาไปเก็บในฟิลด์รูปแทน data URL เต็ม */
+  uploadImage: async (token: string, kind: UploadKind, dataUrl: string): Promise<string> =>
+    (await request<{ url: string }>(token, `/uploads/${kind}`, { method: 'POST', body: JSON.stringify({ dataUrl }) }))
+      .url,
+
   bookings: async (token: string): Promise<Booking[]> =>
     (await request<BackendBooking[]>(token, '/bookings')).map(toFrontendBooking),
 
   /** คิวรับงานของทุกลูกค้า (ไม่มีข้อมูลส่วนตัว) — ใช้เช็ควันที่เต็มแล้วตอนเลือกวันจัดงาน ต่างจาก bookings() ที่ลูกค้าเห็นแค่ของตัวเอง */
   bookingsAvailability: async (token: string): Promise<QueueBooking[]> =>
     (await request<BackendQueueBooking[]>(token, '/bookings/availability')).map(toFrontendQueueBooking),
+
+  /** เวอร์ชัน paginate ของ bookings() — ใช้เฉพาะหน้ารายการ (Orders/ประวัติการจอง) ไม่ใช่ทุกหน้าที่ใช้ bookings
+   *  search: ค้นชื่อลูกค้า (contains) หรือเลขที่จองแบบ "BK-2026-007" (ตรงเป๊ะ) — ทำฝั่ง backend ทั้งคู่ */
+  bookingsPage: async (
+    token: string,
+    page: number,
+    pageSize: number,
+    search?: string,
+    status?: Booking['status'],
+  ): Promise<BookingsPage> => {
+    const q = new URLSearchParams({ page: String(page), pageSize: String(pageSize) })
+    if (search?.trim()) q.set('search', search.trim())
+    if (status) q.set('status', toBackendStatus(status))
+    const res = await request<{ items: BackendBooking[]; total: number; page: number; pageSize: number }>(
+      token,
+      `/bookings/page?${q.toString()}`,
+    )
+    return { ...res, items: res.items.map(toFrontendBooking) }
+  },
 
   createBooking: async (token: string, input: CreateBookingInput): Promise<Booking> =>
     toFrontendBooking(

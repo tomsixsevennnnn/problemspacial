@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Check, ChevronLeft, ChevronRight, Users, X } from 'lucide-react'
+import { resolveAssetUrl } from '../../api'
 import type { Booking } from '../../types'
 import {
   BASE_SLOTS,
@@ -189,7 +190,7 @@ export default function CalendarView({ bookings, onUpdateBooking }: CalendarView
 
       {/* Event popup */}
       {popup && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-black/55 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm sm:max-w-md overflow-hidden">
             <div className={`p-5 flex items-start justify-between ${BOOKING_STATUS_INFO[popup.status].chip}`}>
               <div>
@@ -232,7 +233,7 @@ export default function CalendarView({ bookings, onUpdateBooking }: CalendarView
               {popup.paymentSlip && (
                 <button type="button" onClick={() => setSlipZoom(popup.paymentSlip!)} className="block w-full">
                   <img
-                    src={popup.paymentSlip}
+                    src={resolveAssetUrl(popup.paymentSlip)}
                     alt="สลิปโอนเงิน"
                     className="w-full max-h-48 object-contain rounded-xl border border-gray-200 bg-gray-50 hover:opacity-90 transition-opacity cursor-zoom-in"
                   />
@@ -279,7 +280,7 @@ export default function CalendarView({ bookings, onUpdateBooking }: CalendarView
             <X size={18} />
           </button>
           <img
-            src={slipZoom}
+            src={resolveAssetUrl(slipZoom)}
             alt="สลิปโอนเงิน (ขยาย)"
             className="max-w-full max-h-full object-contain rounded-xl"
             onClick={e => e.stopPropagation()}

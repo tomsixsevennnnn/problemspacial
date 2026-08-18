@@ -15,6 +15,7 @@ import {
   ZoomOut,
 } from 'lucide-react'
 import DishTile from '../../components/DishTile'
+import { resolveAssetUrl, type UploadKind } from '../../api'
 import type { AppSettings, MenuItem, Package } from '../../types'
 import { CATEGORY_MAP, orderedCategories } from '../../data'
 import { pickImageAsDataUrl } from '../../imageUpload'
@@ -25,13 +26,13 @@ interface MenusProps {
   settings: AppSettings
   onSaveMenu: (item: MenuItem) => void
   onDeleteMenu: (id: string) => void
+  onUploadImage: (kind: UploadKind, dataUrl: string) => Promise<string>
 }
 
 interface MenuForm {
   name: string
   category: string
   description: string
-  extraPrice: number
   costPrice: number
   image: string
   imagePosition: { x: number; y: number }
@@ -48,14 +49,13 @@ const emptyForm = (category: string): MenuForm => ({
   name: '',
   category,
   description: '',
-  extraPrice: 0,
   costPrice: 0,
   image: '',
   imagePosition: CENTER_POSITION,
   imageScale: DEFAULT_SCALE,
 })
 
-export default function Menus({ menus, packages, settings, onSaveMenu, onDeleteMenu }: MenusProps) {
+export default function Menus({ menus, packages, settings, onSaveMenu, onDeleteMenu, onUploadImage }: MenusProps) {
   const categories = orderedCategories(settings.categoryOrder)
   const [activeCategory, setActiveCategory] = useState(categories[0].id)
   const [showModal, setShowModal] = useState(false)
@@ -67,14 +67,15 @@ export default function Menus({ menus, packages, settings, onSaveMenu, onDeleteM
   const fileInputRef = useRef<HTMLInputElement>(null)
   const imageDragRef = useRef<{ startX: number; startY: number; startPos: { x: number; y: number }; width: number; height: number } | null>(null)
 
-  /** เลือกรูปจากเครื่อง — ย่อขนาดแล้วเก็บเป็นรูปในเมนูเลย */
+  /** เลือกรูปจากเครื่อง — ย่อขนาดแล้วอัปโหลดขึ้น backend เก็บเป็นไฟล์ทันที (ไม่ฝัง data URL เต็มไว้ในฟอร์ม) */
   const handlePickImage = async (file: File | undefined) => {
     if (!file) return
     setUploading(true)
     setImageError(null)
     try {
       const dataUrl = await pickImageAsDataUrl(file)
-      setForm(f => ({ ...f, image: dataUrl, imagePosition: CENTER_POSITION, imageScale: DEFAULT_SCALE }))
+      const url = await onUploadImage('menu-image', dataUrl)
+      setForm(f => ({ ...f, image: url, imagePosition: CENTER_POSITION, imageScale: DEFAULT_SCALE }))
     } catch (err) {
       setImageError(err instanceof Error ? err.message : 'อัปโหลดรูปไม่สำเร็จ')
     } finally {
@@ -133,7 +134,6 @@ export default function Menus({ menus, packages, settings, onSaveMenu, onDeleteM
       name: item.name,
       category: item.category,
       description: item.description,
-      extraPrice: item.extraPrice ?? 0,
       costPrice: item.costPrice ?? 0,
       image: item.image ?? '',
       imagePosition: item.imagePosition ?? CENTER_POSITION,
@@ -153,11 +153,11 @@ export default function Menus({ menus, packages, settings, onSaveMenu, onDeleteM
       category: form.category,
       description: form.description.trim(),
       active: editing?.active ?? true,
-      ...(form.extraPrice > 0 ? { extraPrice: form.extraPrice } : {}),
       ...(form.costPrice > 0 ? { costPrice: form.costPrice } : {}),
-      ...(form.image.trim()
-        ? { image: form.image.trim(), imagePosition: form.imagePosition, imageScale: form.imageScale }
-        : {}),
+      // ส่ง image เสมอแม้เป็นค่าว่าง (ไม่ใช่แค่ตอนมีรูป) — ไม่งั้นตอนกด "ลบรูป" แล้วบันทึก คีย์ image จะหาย
+      // ไปจาก payload ทั้งอัน ทำให้ backend ไม่รู้ว่าต้องล้างค่าเดิม รูปเก่าเลยค้างอยู่ใน DB ต่อไปเงียบๆ (ข้อ 7)
+      image: form.image.trim(),
+      ...(form.image.trim() ? { imagePosition: form.imagePosition, imageScale: form.imageScale } : {}),
     }
     onSaveMenu(item)
     setActiveCategory(item.category)
@@ -241,11 +241,6 @@ export default function Menus({ menus, packages, settings, onSaveMenu, onDeleteM
                       <span className="bg-white/90 text-gray-600 text-xs font-bold px-3 py-1.5 rounded-full">ปิดใช้งาน</span>
                     </div>
                   )}
-                  {menu.extraPrice && (
-                    <div className="absolute top-2 left-2 bg-amber-400 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">
-                      +{menu.extraPrice}฿
-                    </div>
-                  )}
                 </div>
                 <div className="p-3">
                   <p className="font-semibold text-gray-800 text-sm mb-0.5">{menu.name}</p>
@@ -310,7 +305,7 @@ export default function Menus({ menus, packages, settings, onSaveMenu, onDeleteM
 
       {/* Add / Edit modal */}
       {showModal && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col overflow-hidden">
             <div className="flex items-center justify-between px-6 py-5 border-b border-gray-100 flex-shrink-0">
               <h3 className="font-bold text-gray-900 text-lg">{editing ? 'แก้ไขเมนู' : 'เพิ่มเมนูใหม่'}</h3>
@@ -373,18 +368,6 @@ export default function Menus({ menus, packages, settings, onSaveMenu, onDeleteM
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">ราคาเพิ่ม (฿)</label>
-                <input
-                  type="number"
-                  min="0"
-                  value={form.extraPrice}
-                  onChange={e => setForm(f => ({ ...f, extraPrice: Math.max(0, Number(e.target.value) || 0) }))}
-                  className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
-                />
-                <p className="text-[10px] text-gray-400 mt-1">0 = ไม่มีค่าใช้จ่ายเพิ่ม</p>
-              </div>
-
-              <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">ราคาทุนต่อจาน (฿)</label>
                 <input
                   type="number"
@@ -416,7 +399,7 @@ export default function Menus({ menus, packages, settings, onSaveMenu, onDeleteM
                       className="relative w-full aspect-video rounded-xl border border-gray-200 overflow-hidden cursor-move touch-none select-none"
                     >
                       <img
-                        src={form.image}
+                        src={resolveAssetUrl(form.image)}
                         alt="รูปเมนู"
                         draggable={false}
                         className="w-full h-full object-cover pointer-events-none"
@@ -545,7 +528,7 @@ export default function Menus({ menus, packages, settings, onSaveMenu, onDeleteM
 
       {/* Delete confirm */}
       {confirmDelete && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm p-6">
             <div className="w-12 h-12 bg-red-50 rounded-2xl flex items-center justify-center mb-4">
               <Trash2 size={20} className="text-red-500" />

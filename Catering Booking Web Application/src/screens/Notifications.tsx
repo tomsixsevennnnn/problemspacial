@@ -1,7 +1,7 @@
 import { Bell, Calendar, CheckCircle, Clock, XCircle } from 'lucide-react'
 import type { ComponentType } from 'react'
 import Navbar from '../components/Navbar'
-import { buildNotifications, formatRelativeTime, isNotificationNew } from '../notifications'
+import { buildNotifications, formatRelativeTime, isNotificationUnread } from '../notifications'
 import type { NotificationKind } from '../notifications'
 import type { Booking, Screen, UserProfile } from '../types'
 
@@ -11,6 +11,8 @@ interface NotificationsProps {
   bookings: Booking[]
   notifCount: number
   shopName: string
+  /** เวลาที่เปิดหน้านี้ล่าสุด (ก่อนรอบนี้) — ใช้ตัดสินว่ารายการไหน "ยังไม่อ่าน" ยังโชว์ป้าย NEW อยู่ในการเข้าชมรอบนี้ */
+  notifSeenAt: number
 }
 
 type NotifStyle = {
@@ -28,7 +30,7 @@ const STYLE: Record<NotificationKind, NotifStyle> = {
   reminder: { icon: Calendar, color: 'text-blue-500', bg: 'bg-blue-50', border: 'border-blue-100' },
 }
 
-export default function Notifications({ navigate, user, bookings, notifCount, shopName }: NotificationsProps) {
+export default function Notifications({ navigate, user, bookings, notifCount, shopName, notifSeenAt }: NotificationsProps) {
   const notifications = buildNotifications(bookings)
 
   return (
@@ -55,7 +57,7 @@ export default function Notifications({ navigate, user, bookings, notifCount, sh
             {notifications.map((notif) => {
               const style = STYLE[notif.kind]
               const Icon = style.icon
-              const isNew = isNotificationNew(notif)
+              const isNew = isNotificationUnread(notif, notifSeenAt)
               return (
                 <div
                   key={notif.id}

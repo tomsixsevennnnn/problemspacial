@@ -1,6 +1,7 @@
-import { Injectable } from '@nestjs/common'
+import { ConflictException, Injectable } from '@nestjs/common'
 import type { Settings } from '@prisma/client'
 import { PrismaService } from '../prisma/prisma.service'
+import { UploadsService } from '../uploads/uploads.service'
 import { UpdateSettingsDto } from './dto/update-settings.dto'
 
 /** ค่าเริ่มต้น — ต้องตรงกับ DEFAULT_* ใน frontend src/documents.ts และ src/geo.ts */
@@ -31,7 +32,10 @@ const DEFAULT_SETTINGS = {
 
 @Injectable()
 export class SettingsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private uploads: UploadsService,
+  ) {}
 
   /** cache แถว settings เดียวไว้ในหน่วยความจำ — DB จริงอยู่ที่ Railway แต่ละ query กิน ~1-2s
    *  ทำให้ request ถัดจากแรกเร็วขึ้นเหลือหลัก ms, update() ในเครื่องเดียวกันล้าง cache ทันที
@@ -49,11 +53,28 @@ export class SettingsService {
     return this.cached
   }
 
+  /** ถ้าเปลี่ยน/ลบ QR (promptPayQr เป็นค่าใหม่ที่ต่างจากเดิม) ลบไฟล์รูปเก่าทิ้งหลัง update สำเร็จ กันไฟล์ orphan ค้าง disk */
   async update(dto: UpdateSettingsDto) {
-    await this.get()
-    const updated = await this.prisma.settings.update({ where: { id: 1 }, data: dto })
+    const before = await this.get()
+    const { expectedVersion, ...patch } = dto
+
+    // updateMany แทน update ตรงๆ เพราะต้องเช็ค version ใน where ด้วย — ถ้ามีคนแก้ไปแล้วก่อนหน้านี้ (version ไม่ตรง)
+    // count จะเป็น 0 แทนที่จะ throw จาก Prisma โดยตรง ทำให้แยกแยะ "conflict" ออกจาก error อื่นได้ชัดเจน
+    const result = await this.prisma.settings.updateMany({
+      where: { id: 1, version: expectedVersion },
+      data: { ...patch, version: { increment: 1 } },
+    })
+    if (result.count === 0) {
+      throw new ConflictException('มีคนแก้ไขค่าตั้งค่าไปแล้ว กรุณาโหลดหน้าใหม่')
+    }
+
+    const updated = await this.prisma.settings.findUniqueOrThrow({ where: { id: 1 } })
     this.cached = updated
     this.cachedAt = Date.now()
+
+    if (patch.promptPayQr !== undefined && before.promptPayQr && before.promptPayQr !== updated.promptPayQr) {
+      await this.uploads.deleteManagedFile(before.promptPayQr)
+    }
     return updated
   }
 

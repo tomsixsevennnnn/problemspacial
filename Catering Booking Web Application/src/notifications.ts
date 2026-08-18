@@ -11,11 +11,12 @@ export interface NotificationItem {
   timestamp: string
 }
 
-/** ถือว่า "ใหม่" ถ้าเกิดขึ้นภายใน 24 ชม.ที่ผ่านมา — ใช้ตัดสินทั้งป้าย NEW รายรายการ และตัวเลขนับที่ไอคอนกระดิ่ง */
-const NEW_WINDOW_MS = 86_400_000
+/** ยังไม่เคยเปิดหน้าแจ้งเตือนมาก่อนเลย (ไม่มี seenAt ใน localStorage) — ใช้ช่วง 24 ชม.ที่ผ่านมาเป็นค่าเริ่มต้นของ "ยังไม่อ่าน" กันตัวเลขเก่าโผล่มาเต็มไปหมดตั้งแต่ครั้งแรก */
+export const DEFAULT_UNREAD_WINDOW_MS = 86_400_000
 
-export const isNotificationNew = (item: Pick<NotificationItem, 'timestamp'>): boolean =>
-  Date.now() - new Date(item.timestamp).getTime() < NEW_WINDOW_MS
+/** ยังไม่อ่าน = เกิดขึ้นหลังจากครั้งล่าสุดที่ผู้ใช้เปิดหน้าแจ้งเตือน (seenAt) — ใช้ตัดสินทั้งป้าย NEW รายรายการ และตัวเลขนับที่ไอคอนกระดิ่ง */
+export const isNotificationUnread = (item: Pick<NotificationItem, 'timestamp'>, seenAt: number): boolean =>
+  new Date(item.timestamp).getTime() > seenAt
 
 /** แปลง timestamp เป็นข้อความเวลาแบบสัมพัทธ์ เช่น "5 นาทีที่แล้ว" — ใช้ร่วมกันทั้งหน้ารายการแจ้งเตือนและ dropdown */
 export const formatRelativeTime = (iso: string): string => {
@@ -59,7 +60,9 @@ export const buildNotifications = (bookings: Booking[]): NotificationItem[] => {
           kind: 'reminder',
           title: 'แจ้งเตือนงานพรุ่งนี้',
           message: `อย่าลืม! งานจัดเลี้ยงของคุณ ${no} จะจัดขึ้นพรุ่งนี้ ${booking.timeSlot}`,
-          timestamp: new Date().toISOString(),
+          // เดิมใช้ new Date().toISOString() (เวลาปัจจุบัน) ซึ่งเปลี่ยนใหม่ทุกครั้งที่ re-render — พอผูกสถานะอ่านแล้ว/ยังไม่อ่านกับ
+          // seenAt จะกลายเป็น "ใหม่กว่า seenAt เสมอ" คือไม่มีทางอ่านแล้วสักที ใช้วันก่อนวันจัดงานแทน (ผูกกับ booking.date คงที่)
+          timestamp: new Date(new Date(booking.date + 'T00:00:00').getTime() - 86_400_000).toISOString(),
         })
       }
     } else if (booking.status === 'completed') {
@@ -84,5 +87,5 @@ export const buildNotifications = (bookings: Booking[]): NotificationItem[] => {
   return items.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
 }
 
-export const unreadNotificationCount = (bookings: Booking[]): number =>
-  buildNotifications(bookings).filter(isNotificationNew).length
+export const unreadNotificationCount = (bookings: Booking[], seenAt: number): number =>
+  buildNotifications(bookings).filter(n => isNotificationUnread(n, seenAt)).length

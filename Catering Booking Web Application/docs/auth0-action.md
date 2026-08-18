@@ -39,7 +39,7 @@ Owner login ด้วย username/password ไม่ใช่ Google ต้อ�
 - Connection: `Username-Password-Authentication`
 - ตั้ง email/password ให้เจ้าของร้าน
 
-หลังตั้งค่าครบ กด "เข้าระบบในฐานะเจ้าของร้าน" ในหน้า Login แล้ว login ด้วยบัญชีนี้ → `role` จะเป็น `'owner'` → แอปจะพาไปหน้า `owner-dashboard` อัตโนมัติ (ดู `effectiveScreen` ใน `src/App.tsx`)
+หลังตั้งค่าครบ กด "เข้าระบบด้วยรหัสผ่าน" ในหน้า Login แล้ว login ด้วยบัญชีนี้ → `role` จะเป็น `'owner'` → แอปจะพาไปหน้า `owner-dashboard` อัตโนมัติ (ดู `effectiveScreen` ใน `src/App.tsx`)
 
 ## ตรวจสอบว่า claim มาจริง
 

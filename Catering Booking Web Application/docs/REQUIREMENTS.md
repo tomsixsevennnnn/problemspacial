@@ -133,7 +133,7 @@ title: "Requirement Specification — ระบบจองแคทเธอร
 
 | หน้าจอ | ไฟล์ | หน้าที่ |
 |---|---|---|
-| Login | `src/screens/Login.tsx` | ปุ่มเข้าระบบแบบ Google (customer) และปุ่ม "เข้าระบบในฐานะเจ้าของร้าน" (username/password) — เรียก `loginWithRedirect` ของ Auth0 พร้อมบังคับ connection ให้ตรง role |
+| Login | `src/screens/Login.tsx` | ปุ่มเข้าระบบแบบ Google (customer) และปุ่ม "เข้าระบบด้วยรหัสผ่าน" (username/password) — เรียก `loginWithRedirect` ของ Auth0 พร้อมบังคับ connection ให้ตรง role |
 | CompleteProfile | `src/screens/CompleteProfile.tsx` | หลัง login ด้วย Google ครั้งแรก ขอเบอร์โทร/Line ID (ข้อมูลอื่นมากับบัญชี Google แล้ว) เก็บลง local storage ผูกกับ Auth0 `sub` |
 
 ### 4.2 ขั้นตอนการจอง (Customer booking flow)

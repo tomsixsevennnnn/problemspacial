@@ -15,9 +15,9 @@ export type Screen =
   | 'owner-packages'
   | 'owner-menus'
   | 'owner-documents'
-  | 'owner-customers'
   | 'owner-reports'
   | 'owner-settings'
+  | 'owner-users'
 
 export interface Category {
   id: string
@@ -37,7 +37,6 @@ export interface MenuItem {
   imagePosition?: { x: number; y: number }
   /** ระดับซูมของรูป (1 = ปกติ, มากกว่า 1 = ขยาย) — ไม่ตั้งค่า = 1 */
   imageScale?: number
-  extraPrice?: number
   /** ราคาทุนต่อจาน (บาท) — กรอกตรงๆ ไม่คำนวณจากวัตถุดิบ */
   costPrice?: number
   /** เปิด/ปิดการแสดงในคลังเมนูของร้าน (ไม่ตั้งค่า = เปิด) */
@@ -221,4 +220,6 @@ export interface AppSettings {
   shopLocation: ShopLocation
   /** ค่าน้ำมัน (บาท/กิโลเมตร) — ใช้คูณระยะทางไป-กลับคำนวณค่าเดินทางงานนอกพื้นที่ */
   fuelCostPerKm: number
+  /** เลข version ปัจจุบันของค่าตั้งค่า — ส่งกลับตอน PATCH กันสองแท็บ/สองคนแก้ทับกันเงียบๆ (ดู settings.service.ts ฝั่ง backend) */
+  version: number
 }

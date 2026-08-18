@@ -4,6 +4,10 @@
     <!-- figma:head-start -->
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- รูปแกลเลอรีหน้า Home โหลดจาก images.unsplash.com — preconnect ล่วงหน้าให้ DNS/TLS handshake
+         เสร็จก่อนถึงส่วนแกลเลอรีจริง กันรอ round-trip ซ้อนตอนโหลดรูปแต่ละรูป -->
+    <link rel="preconnect" href="https://images.unsplash.com" crossorigin />
+    <link rel="dns-prefetch" href="https://images.unsplash.com" />
     <title><!-- figma:title --></title>
     <!-- figma:head-end -->
   </head>

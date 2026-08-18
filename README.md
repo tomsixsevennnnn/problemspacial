@@ -85,14 +85,16 @@ corepack pnpm dev                # รันที่ http://localhost:8443
 
    กด **Deploy** แล้วไปที่ **Actions → Triggers → post-login** ลาก Action นี้เข้า flow แล้วกด **Apply**
 
+> **หมายเหตุ**: Action ด้านบนกำหนด role แค่ตอน**สร้างบัญชีใหม่ครั้งแรก**เท่านั้น หลังจากนั้น role จริงถูกเก็บและจัดการในฐานข้อมูลของแอปเอง — owner ที่มีอยู่แล้วสามารถเลื่อน/ถอดสิทธิ์ owner ให้ผู้ใช้คนอื่น (ที่เคย login มาแล้วอย่างน้อย 1 ครั้ง ไม่ว่าจะ login ด้วย Google หรือ username/password) ได้เองผ่านหน้า **"สิทธิ์การเข้าถึง"** ในแอป ไม่ต้องเข้า Auth0 Dashboard อีกต่อไป (ดูรายละเอียดในหัวข้อความสามารถฝั่งเจ้าของร้านด้านล่าง)
+
 ---
 
 ## การเข้าใช้งาน
 
 หน้าแรกคือหน้า **เข้าสู่ระบบ**:
 
-- ปุ่ม **"เข้าสู่ระบบด้วย Google"** — สำหรับลูกค้า login ผ่าน Auth0 (Google Social Login)
-- ลิงก์ **"เข้าระบบในฐานะเจ้าของร้าน"** — สำหรับพนักงานร้าน login ด้วย username/password ที่สร้างไว้ใน Auth0
+- ปุ่ม **"เข้าสู่ระบบด้วย Google"** — สำหรับลูกค้า (และ owner ที่ถูกเลื่อนสิทธิ์ผ่านแอปแล้ว — ดูด้านล่าง) login ผ่าน Auth0 (Google Social Login)
+- ลิงก์ **"เข้าระบบในฐานะเจ้าของร้าน"** — สำหรับบัญชี owner ดั้งเดิมที่สร้างไว้ใน Auth0 Dashboard เท่านั้น (username/password) ไม่จำเป็นสำหรับ owner ที่ถูกเลื่อนสิทธิ์ทีหลัง
 
 ลูกค้าที่ login ครั้งแรกจะต้องกรอกเบอร์โทร/Line ID เพิ่ม (ข้อมูลที่ Google ไม่มีให้) ก่อนเข้าใช้งาน
 
@@ -119,9 +121,10 @@ corepack pnpm dev                # รันที่ http://localhost:8443
 - **รายการจอง** — ดูรายละเอียด เปลี่ยนสถานะ และ **คำนวณจำนวนพนักงานอัตโนมัติ** พร้อมปรับแก้และใส่หมายเหตุได้
 - **ปฏิทิน** — ดูงานทั้งเดือน สถานะคิว และเปลี่ยนสถานะงานได้จากปฏิทิน
 - **แพ็กเกจ** — เพิ่ม/แก้ไขแพ็กเกจ และเลือกเมนูในแต่ละประเภทอาหารได้เอง
-- **เมนูอาหาร** — เพิ่ม/แก้ไข/ลบเมนู อัปโหลดรูปจากเครื่อง (ย่อขนาดอัตโนมัติ)
-- **ลูกค้า** — รายชื่อ/ประวัติลูกค้าพร้อมเบอร์โทรและ Line ID
+- **เมนูอาหาร** — เพิ่ม/แก้ไข/ลบเมนู อัปโหลดรูปจากเครื่อง (ย่อขนาดอัตโนมัติ เก็บเป็นไฟล์บน server)
 - **เอกสาร** — ออกใบเสนอราคาและใบจอง พิมพ์หรือบันทึกเป็น PDF ได้
+- **รายงาน** — สรุปรายได้/ต้นทุน/กำไรย้อนหลังเป็นกราฟ
+- **สิทธิ์การเข้าถึง** — ดูรายชื่อ owner ทั้งหมด และเลื่อน/ถอดสิทธิ์ owner ให้ผู้ใช้คนอื่นได้เอง (ค้นหาด้วยอีเมล ต้องเคย login มาก่อนอย่างน้อย 1 ครั้ง) กันไม่ให้ถอดสิทธิ์ owner คนสุดท้ายออกจนระบบไม่เหลือ owner เลย
 - **ตั้งค่า** — แก้ข้อมูลร้าน อัตรามัดจำ ค่าขนส่ง ขั้นต่ำโต๊ะ
 
 ---
@@ -170,18 +173,23 @@ Catering Booking Web Application/
 
 backend/
 ├── prisma/
-│   ├── schema.prisma            # User, Booking, Package, PackageCourse, MenuItem, Settings
+│   ├── schema.prisma            # User, Booking, Package, PackageCourse, MenuItem, Settings, AuditLog
+│   ├── migrations/
 │   └── seed.ts                  # ใส่แพ็กเกจ/เมนูเริ่มต้น
+├── scripts/
+│   └── migrate-images-to-disk.ts # สคริปต์ครั้งเดียว ย้ายรูป base64 เก่าใน DB ออกมาเป็นไฟล์ (รันด้วยมือ)
 ├── jest.config.js
 └── src/
-    ├── main.ts
-    ├── app.module.ts
-    ├── auth/                     # Auth0 JWT guard + role guard (+ roles.guard.spec.ts)
-    ├── users/                    # sync profile, PATCH เบอร์โทร/Line ID
-    ├── bookings/
+    ├── main.ts                  # bootstrap, helmet, static file serving สำหรับ /uploads
+    ├── app.module.ts            # รวม rate limiting (ThrottlerModule) ระดับแอป
+    ├── auth/                     # Auth0 JWT guard + role guard (เช็ค role จาก DB เป็นหลัก ไม่ใช่ claim ตรงๆ)
+    ├── audit/                    # บันทึก audit log (ลบเมนู/แพ็กเกจ, แก้ไข booking, เปลี่ยน role)
+    ├── uploads/                  # เก็บรูปเมนู/QR/สลิปเป็นไฟล์บน disk แทน base64-in-DB
+    ├── users/                    # sync profile, PATCH เบอร์โทร/Line ID, ค้นหา/เลื่อน-ถอดสิทธิ์ owner
+    ├── bookings/                 # คำนวณราคา+ค่าขนส่งเองเสมอ (pricing.service.ts), กันจองซ้อนวัน
     ├── packages/                 # รวม endpoint แก้ทีละข้อ (courses) แยกจากแก้ทั้งแพ็กเกจ
     ├── menus/
-    └── settings/
+    └── settings/                 # optimistic concurrency (version) กันแก้ทับกัน
 ```
 
 ---
@@ -288,8 +296,9 @@ cd "Catering Booking Web Application"
 
 ## ข้อควรรู้
 
-- **รูปเมนูที่อัปโหลดและสลิปโอนเงิน** ถูกย่อและเก็บเป็น base64 ตรงในฐานข้อมูล ยังไม่ได้แยกไปเก็บที่ object storage (เช่น Cloudflare R2) — ใช้งานได้จริงสำหรับต้นแบบ แต่ควรย้ายก่อนใช้งานเชิงพาณิชย์ที่มีผู้ใช้จำนวนมาก
-- **การชำระเงินมัดจำ** ยังใช้วิธีลูกค้าแนบสลิปให้ร้านตรวจสอบเอง ไม่ใช่ payment gateway จริง (พร้อมเพย์/บัตรเครดิต)
-- **ระบบยังรันอยู่บนเครื่อง dev เท่านั้น** ยังไม่ได้ deploy ขึ้น production จริง (แผนคือ Vercel สำหรับ frontend และ Railway สำหรับ backend/ฐานข้อมูล)
+- **รูปเมนูที่อัปโหลดและสลิปโอนเงิน** เก็บเป็นไฟล์บน disk ของ backend (โฟลเดอร์ `backend/uploads/`) ไม่ใช่ base64 ในฐานข้อมูลอีกต่อไป — ไฟล์เก่าถูกลบทิ้งอัตโนมัติทุกครั้งที่มีการเปลี่ยนรูปใหม่ กันไฟล์ orphan สะสม แต่**ยังไม่ได้แยกไปเก็บที่ object storage** (เช่น Cloudflare R2/S3) เพราะยังไม่ได้ deploy backend เป็น service จริง — ตอน deploy บน Railway ต้องแนบ **Railway Volume** ให้โฟลเดอร์ `uploads/` ไม่งั้นไฟล์จะหายทุกครั้งที่ redeploy
+- **การชำระเงินมัดจำ** ยังใช้วิธีลูกค้าแนบสลิปให้ร้านตรวจสอบเอง ไม่ใช่ payment gateway จริง (พร้อมเพย์/บัตรเครดิต) — เป็นการตัดสินใจตั้งใจ ไม่ใช่ข้อจำกัด
+- **ระบบยังรันอยู่บนเครื่อง dev เท่านั้น** ยังไม่ได้ deploy ขึ้น production จริง (แผนคือ Vercel สำหรับ frontend และ Railway สำหรับ backend/ฐานข้อมูล) — DB บน Railway เป็นฐานข้อมูลจริงที่ backend ฝั่ง dev ต่อตรงอยู่แล้ว
 - **การพิมพ์เอกสาร** ใช้ระบบพิมพ์ของเบราว์เซอร์ เลือก "Save as PDF" เพื่อบันทึกเป็นไฟล์ได้
-- **Automated test** มี unit test แล้ว (Vitest ฝั่ง frontend ครอบกติกาธุรกิจ, Jest ฝั่ง backend ครอบ guard/DTO validation) แต่ยังไม่มี integration/e2e test ที่ยิง API จริงหรือ component test ของหน้าจอ
+- **Automated test** มี unit test ครอบทั้ง business logic, DTO validation, service layer และ guard (Vitest ฝั่ง frontend, Jest ฝั่ง backend) รวมถึงเคส race condition (จองซ้อนวันเดียวกัน, แก้ settings พร้อมกัน) แต่ยังไม่มี integration/e2e test ที่ยิง API จริงหรือ component test ของหน้าจอ
+- **ความปลอดภัย/ความถูกต้องของข้อมูล**: ราคาจองคำนวณจาก backend เสมอ (client ปลอมราคาไม่ได้), role ของผู้ใช้เช็คจากฐานข้อมูลไม่ใช่เชื่อ JWT claim ตรงๆ, มี audit log สำหรับการลบเมนู/แพ็กเกจและแก้ไข booking, กันจองซ้อนวันเดียวกันด้วย DB transaction ระดับ Serializable, มี rate limiting และ security headers (helmet)

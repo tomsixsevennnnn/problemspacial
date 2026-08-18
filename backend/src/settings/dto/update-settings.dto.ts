@@ -1,6 +1,9 @@
-import { IsArray, IsInt, IsNumber, IsOptional, IsString, Max, Min } from 'class-validator'
+import { IsArray, IsInt, IsNumber, IsOptional, IsString, Matches, Max, Min } from 'class-validator'
 
 export class UpdateSettingsDto {
+  /** version ของ settings ที่ client โหลดมาตอนเปิดหน้า — กันสองแท็บ/สองคนแก้ทับกันเงียบๆ (ดู settings.service.ts) */
+  @IsInt() expectedVersion!: number
+
   @IsOptional() @IsString() shopName?: string
   @IsOptional() @IsString() shopNameEn?: string
   @IsOptional() @IsString() shopInitials?: string
@@ -11,7 +14,10 @@ export class UpdateSettingsDto {
   @IsOptional() @IsString() bankName?: string
   @IsOptional() @IsString() bankAccountNumber?: string
   @IsOptional() @IsString() bankAccountName?: string
-  @IsOptional() @IsString() promptPayQr?: string
+  /** path จาก POST /uploads/promptpay-qr เท่านั้น (ข้อ 3) หรือ '' เพื่อลบรูปออก */
+  @IsOptional()
+  @Matches(/^(\/uploads\/.+)?$/, { message: 'promptPayQr ต้องเป็น path จาก /uploads/promptpay-qr หรือค่าว่างเท่านั้น' })
+  promptPayQr?: string
 
   @IsOptional() @IsNumber() @Min(0) @Max(1) depositRate?: number
   @IsOptional() @IsInt() @Min(0) deliveryFee?: number
