@@ -7,7 +7,7 @@ title: "Requirement Specification — ระบบจองแคทเธอร
 
 # Requirement Specification: ระบบจองแคทเธอริ่ง (Catering Booking Web Application)
 
-> เอกสารนี้สรุปจากการอ่านโค้ดจริงในโปรเจกต์ ณ วันที่ 2026-08-03 ครอบคลุมทั้งฝั่ง Frontend (`Catering Booking Web Application/`) และ Backend API (`backend/`)
+> เอกสารนี้สรุปจากการอ่านโค้ดจริงในโปรเจกต์ ปรับปรุงล่าสุด 2026-08-18 ครอบคลุมทั้งฝั่ง Frontend (`Catering Booking Web Application/`) และ Backend API (`backend/`)
 >
 > ต้องการรายละเอียดระดับฟังก์ชัน/เมธอด (พารามิเตอร์ ตรรกะ เงื่อนไข validation ของทุกหน้าจอและทุก endpoint) ดูที่ [`FUNCTIONS.md`](./FUNCTIONS.md)
 
@@ -19,10 +19,10 @@ title: "Requirement Specification — ระบบจองแคทเธอร
 
 | ส่วน | โฟลเดอร์ | สถานะ |
 |---|---|---|
-| Frontend (SPA) | `Catering Booking Web Application/` | ใช้งานได้เต็มรูปแบบ แต่ปัจจุบัน **ข้อมูล booking/เมนู/แพ็กเกจ/ค่าตั้งค่า ยังเป็น mock state ในหน่วยความจำ** (`src/data.ts`, `useState` ใน `App.tsx`) ยังไม่ได้เรียก REST API ของ backend |
-| Backend (REST API) | `backend/` | มี API + DB schema พร้อมใช้งานตาม endpoint ด้านล่าง แต่ frontend ยังไม่ได้เชื่อมต่อจริง (มีไว้เป็นสัญญา API ที่ออกแบบไว้แล้วรอเชื่อม) |
+| Frontend (SPA) | `Catering Booking Web Application/` | เชื่อมต่อ REST API ของ backend จริงแล้วทั้งหมด (booking/เมนู/แพ็กเกจ/ค่าตั้งค่า/อัปโหลดไฟล์/สิทธิ์ผู้ใช้) — ไม่มี local mock state สำหรับข้อมูลธุรกิจอีกต่อไป |
+| Backend (REST API) | `backend/` | มี API + DB schema (PostgreSQL บน Railway) ใช้งานจริง มี automated test (Jest) ครอบคลุม service หลักทุกตัว |
 
-> **หมายเหตุสำคัญ:** นี่คือ gap ที่ควรระบุใน backlog — ต้องแทนที่ local state ฝั่ง frontend ด้วยการเรียก REST API จริงของ backend (`/users/me`, `/bookings`, `/menus`, `/packages`, `/settings`)
+> **หมายเหตุ:** ราคา/ค่าขนส่งของใบจองคำนวณที่ backend เสมอ (`bookings/pricing.service.ts`) — frontend ส่งแค่ `packageId`/`tables`/`location` ไม่ส่งตัวเลขราคาให้ backend เชื่อถือตรงๆ อีกต่อไป (กัน client แก้ raw request โกงราคา)
 
 ---
 
@@ -63,9 +63,10 @@ title: "Requirement Specification — ระบบจองแคทเธอร
 - **Auth0** เป็นผู้ให้บริการ identity เดียว แยกบทบาทตาม **connection ที่ใช้ login**:
   - `customer` → login ด้วย Google OAuth2 (`google-oauth2`)
   - `owner` → login ด้วย Username/Password (`Username-Password-Authentication`), ต้องสร้างบัญชีไว้ล่วงหน้าใน Auth0 Dashboard
-- Auth0 ไม่ส่ง connection name มาตรงๆ ใน token จึงต้องใช้ **Auth0 Action** (Post-Login) ฝัง custom claim `https://pipatphochana-catering.app/role` (`owner`/`customer`) ลงใน ID token และ Access token (ดู `docs/auth0-action.md`)
-- Frontend อ่าน role จาก claim นี้ผ่าน `roleFromAuth0User()` (`src/auth.ts`)
-- Backend ตรวจสอบ JWT ด้วย `JwtStrategy` (RS256 ผ่าน JWKS ของ Auth0 tenant) แล้วเช็ค role จาก claim เดียวกันใน `RolesGuard` + decorator `@Roles('owner' | 'customer')` — ไม่ใส่ decorator = เข้าถึงได้ทุก role ที่ login แล้ว
+- Auth0 ไม่ส่ง connection name มาตรงๆ ใน token จึงต้องใช้ **Auth0 Action** (Post-Login) ฝัง custom claim `https://pipatphochana-catering.app/role` (`owner`/`customer`) ลงใน ID token และ Access token (ดู `docs/auth0-action.md`) — claim นี้ใช้เป็นค่า**เริ่มต้น**ตอนสร้าง `User` record ครั้งแรกเท่านั้น
+- หลังจากนั้น **`User.role` ใน DB คือความจริงหลัก** ไม่ถูก sync ทับจาก claim อีกในการ login ครั้งถัดๆ ไป — owner ที่มีอยู่แล้วสามารถเลื่อน/ถอดสิทธิ์ owner ให้บัญชีอื่น (ที่เคย login มาแล้วอย่างน้อย 1 ครั้ง) ได้เองผ่านหน้า "สิทธิ์การเข้าถึง" ในแอป โดยไม่ต้องเข้า Auth0 Dashboard (ดู `UsersController` หัวข้อ 4.5)
+- Frontend กำหนด role ที่ใช้ควบคุมการนำทางจาก `backendUser.role` (ผลลัพธ์ของ `GET /users/me`) เป็นหลัก ใช้ claim ผ่าน `roleFromAuth0User()` (`src/auth.ts`) เป็น fallback แค่ช่วงก่อนโหลดข้อมูล user จาก backend เสร็จ
+- Backend ตรวจสอบ JWT ด้วย `JwtStrategy` (RS256 ผ่าน JWKS ของ Auth0 tenant) แล้วเช็ค role จาก **DB** (query `User.role` โดย `auth0Sub`, cache ในหน่วยความจำ 5 วินาที) ใน `RolesGuard` + decorator `@Roles('owner' | 'customer')` — ไม่ใส่ decorator = เข้าถึงได้ทุก role ที่ login แล้ว; ถ้ายังไม่มี `User` record (login ครั้งแรกสุด) จะ fallback ไปใช้ค่าจาก JWT claim ชั่วคราว
 - ข้อมูลโปรไฟล์เพิ่มเติมที่ Auth0/Google ไม่มีให้ (เบอร์โทร, Line ID) ขอเพิ่มครั้งแรกหลัง login ผ่านหน้า **CompleteProfile** แล้วเก็บไว้ (frontend: `localStorage` ผ่าน `src/profileStore.ts`; backend: มี endpoint `PATCH /users/me` รองรับ)
 
 ---
@@ -99,12 +100,14 @@ title: "Requirement Specification — ระบบจองแคทเธอร
 - **ออเดอร์**: ดูใบจองทั้งหมดของทุกลูกค้า, เปลี่ยนสถานะใบจอง (รอยืนยัน/ยืนยันแล้ว/เสร็จสิ้น/ยกเลิก), ปรับแผนกำลังคนจริง (จำนวนที่ระบบคำนวณ vs จำนวนที่ปรับแก้เอง) พร้อมหมายเหตุ
 - **ปฏิทินร้าน**: ดูภาพรวมใบจองทั้งหมดตามวัน, อัปเดตสถานะใบจองจากมุมมองปฏิทิน
 - **แพ็กเกจ**: สร้าง/แก้ไข/ลบแพ็กเกจ (ราคาต่อโต๊ะ, จำนวนเมนูที่เลือกได้, features, badge, คอร์สอาหารแต่ละข้อพร้อมจำนวนที่เลือกได้และเมนูที่อยู่ในข้อนั้น)
-- **เมนูอาหาร**: สร้าง/แก้ไข/ลบเมนูในคลัง, อัปโหลดรูปเมนู (ย่อขนาดก่อนเก็บ), เปิด/ปิดการแสดงเมนู, ระบบเตือนก่อนลบถ้าเมนูถูกใช้อยู่ในแพ็กเกจ
+- **เมนูอาหาร**: สร้าง/แก้ไข/ลบ(soft delete)เมนูในคลัง, อัปโหลดรูปเมนูเป็นไฟล์จริงบน disk (ย่อขนาดก่อนอัปโหลด, ลบไฟล์เก่าอัตโนมัติเมื่อเปลี่ยน/ลบรูป), เปิด/ปิดการแสดงเมนู, ระบบเตือนก่อนลบถ้าเมนูถูกใช้อยู่ในแพ็กเกจ
 - **เอกสาร**: ออก/พิมพ์ใบเสนอราคาและใบจองของทุกใบจอง โดยใช้เทมเพลตเดียวกัน อ้างอิงค่าตั้งค่าร้าน (ชื่อร้าน, อัตรามัดจำ ฯลฯ)
-- **ลูกค้า**: ดูรายชื่อลูกค้าที่รวมจากใบจอง (จับกลุ่มด้วยเบอร์โทรเป็นหลัก ถ้าไม่มีค่อยใช้ชื่อ — ระบบยังไม่มีระบบสมาชิกแยก) พร้อมประวัติการจองของแต่ละคน
-- **ตั้งค่า**: แก้ไขข้อมูลร้าน (ชื่อไทย/อังกฤษ, ชื่อย่อ, ที่อยู่, เบอร์โทร, Line), อัตรามัดจำ, ค่าขนส่ง, จำนวนโต๊ะขั้นต่ำสำหรับพื้นที่นอกร้าน — มีผลทันทีต่อการคำนวณราคาและเอกสารทั้งระบบ
+- **สิทธิ์การเข้าถึง**: ค้นหาผู้ใช้ (ที่เคย login เข้าระบบมาแล้วอย่างน้อย 1 ครั้ง) ด้วยอีเมล แล้วเลื่อน/ถอดสิทธิ์ owner ให้ได้เอง ไม่ต้องเข้า Auth0 Dashboard, ดูรายชื่อ owner ปัจจุบันทั้งหมด, ระบบกันไม่ให้ถอด owner คนสุดท้ายจนไม่เหลือ owner เลย
+- **ตั้งค่า**: แก้ไขข้อมูลร้าน (ชื่อไทย/อังกฤษ, ชื่อย่อ, ที่อยู่, เบอร์โทร, Line), อัตรามัดจำ, ค่าขนส่ง, จำนวนโต๊ะขั้นต่ำสำหรับพื้นที่นอกร้าน — ป้องกันแก้ทับกันด้วย optimistic concurrency (`Settings.version`) มีผลทันทีต่อการคำนวณราคาและเอกสารทั้งระบบ
 
-**ทำไม่ได้ (ยังไม่มีในระบบ):** ไม่มีบทบาทที่ 3 (เช่น staff/พนักงาน), ไม่มีระบบสมาชิกลูกค้าแยกจาก booking
+**หมายเหตุ:** หน้า "ลูกค้า" (รวมใบจองเป็นรายลูกค้าตามเบอร์โทร) ถูกถอดออกจากระบบแล้ว
+
+**ทำไม่ได้ (ยังไม่มีในระบบ):** ไม่มีบทบาทที่ 3 (เช่น staff/พนักงาน), ไม่มีระบบสมาชิกลูกค้าแยกจาก booking, ไม่มี payment gateway (ยังตรวจสลิปโอนเงินด้วยมือ)
 
 ### 3.3 สรุปสิทธิ์ระดับ API (backend)
 
@@ -122,8 +125,12 @@ title: "Requirement Specification — ระบบจองแคทเธอร
 | `POST /packages`, `PATCH /packages/:id`, `DELETE /packages/:id` | ❌ | ✅ | — |
 | `GET /settings` | — | — | ✅ |
 | `PATCH /settings` | ❌ | ✅ | — |
+| `GET /bookings/page` (ค้นหา+แบ่งหน้า) | ✅ เห็นเฉพาะของตัวเอง | ✅ เห็นทั้งหมด | — |
+| `POST /uploads/menu-image`, `POST /uploads/promptpay-qr` | ❌ | ✅ | — |
+| `POST /uploads/payment-slip` | ✅ | ❌ | — |
+| `GET /users/search`, `GET /users/owners`, `PATCH /users/:id/role` | ❌ | ✅ | — |
 
-ควบคุมด้วย `JwtAuthGuard` (ต้องมี token ที่ valid) + `RolesGuard` (เช็ค custom claim role) ทุก controller
+ควบคุมด้วย `JwtAuthGuard` (ต้องมี token ที่ valid) + `RolesGuard` (เช็ค role จาก DB, ดูหัวข้อ 2.3) ทุก controller ยกเว้น `GET /users/me`/`PATCH /users/me` ที่มีแค่ `JwtAuthGuard`; endpoint อัปโหลดไฟล์มี rate limit เพิ่มเติม (10 ครั้ง/นาที)
 
 ---
 
@@ -161,7 +168,7 @@ title: "Requirement Specification — ระบบจองแคทเธอร
 | Packages | `src/screens/owner/Packages.tsx` | CRUD แพ็กเกจอาหาร, จัดการคอร์ส/ข้อในแพ็กเกจ และเมนูที่เลือกได้ในแต่ละข้อ (กรองตามหมวดของข้อนั้น) |
 | Menus | `src/screens/owner/Menus.tsx` | CRUD เมนูอาหารในคลัง, อัปโหลด/ย่อรูปภาพ, เตือนก่อนลบถ้าถูกใช้ในแพ็กเกจอยู่ |
 | Documents | `src/screens/owner/Documents.tsx` | ออกใบเสนอราคา/ใบจองของทุกใบจอง, สั่งพิมพ์ |
-| Customers | `src/screens/owner/Customers.tsx` | รวมใบจองเป็นรายลูกค้า (key = เบอร์โทร, fallback = ชื่อ), ดูประวัติต่อคน |
+| UserRoles | `src/screens/owner/UserRoles.tsx` | ค้นหาผู้ใช้ด้วยอีเมล (live search), เลื่อน/ถอดสิทธิ์ owner, ดูรายชื่อ owner ทั้งหมด |
 | Settings | `src/screens/owner/Settings.tsx` | แก้ไขข้อมูลร้านและค่าคำนวณ (อัตรามัดจำ, ค่าขนส่ง, ขั้นต่ำโต๊ะพื้นที่นอกร้าน) |
 
 ### 4.4 Shared components / business logic modules
@@ -195,7 +202,11 @@ title: "Requirement Specification — ระบบจองแคทเธอร
 | Packages | `GET /packages` | ทุก role ที่ login แล้ว | ดึงแพ็กเกจทั้งหมด |
 | Packages | `POST /packages`, `PATCH /packages/:id`, `DELETE /packages/:id` | owner | CRUD แพ็กเกจ |
 | Settings | `GET /settings` | ทุก role ที่ login แล้ว | ดึงค่าตั้งค่าร้าน |
-| Settings | `PATCH /settings` | owner | แก้ไขค่าตั้งค่าร้าน |
+| Settings | `PATCH /settings` | owner | แก้ไขค่าตั้งค่าร้าน (optimistic concurrency ผ่าน `version`) |
+| Bookings | `GET /bookings/page` | customer/owner | ดึงแบบแบ่งหน้า+ค้นหา (ใช้กับ Orders.tsx ฝั่ง owner) |
+| Uploads | `POST /uploads/menu-image`, `/promptpay-qr`, `/payment-slip` | owner/owner/customer | อัปโหลดรูปเป็นไฟล์บน disk คืน path สั้น `/uploads/...` |
+| Users | `GET /users/search?email=`, `GET /users/owners`, `PATCH /users/:id/role` | owner | ค้นหา/ดูรายชื่อ/เลื่อน-ถอดสิทธิ์ owner |
+| Audit | (ภายใน, ไม่มี endpoint เปิดเขียนตรง) | — | `AuditService.log()` บันทึกการลบเมนู/แพ็กเกจ, แก้ไข booking, เปลี่ยน role — ไม่ throw แม้บันทึกไม่สำเร็จ (best-effort) |
 
 ---
 
@@ -247,12 +258,13 @@ title: "Requirement Specification — ระบบจองแคทเธอร
 
 ## 6. Data Model สรุป (Prisma schema, `backend/prisma/schema.prisma`)
 
-- **User** — `id, auth0Sub(unique), role(CUSTOMER|OWNER), name, surname, phone, lineId, email, avatar, createdAt` → มีหลาย `Booking`
-- **MenuItem** — `id, name, category, description, image?, extraPrice?, active` → เชื่อมกับหลาย `PackageCourse` (many-to-many ผ่าน `CourseItems`)
-- **Package** — `id, name, pricePerTable, menuLimit, description, features[], badge?` → มีหลาย `PackageCourse`
+- **User** — `id, auth0Sub(unique), role(CUSTOMER|OWNER), name, surname, phone, lineId, email, avatar, createdAt` → มีหลาย `Booking` — `role` แก้ได้ผ่านหน้า "สิทธิ์การเข้าถึง" หลังสร้างครั้งแรก (ดูหัวข้อ 2.3)
+- **MenuItem** — `id, name, category, description, image?, costPrice?, active, deletedAt?` → เชื่อมกับหลาย `PackageCourse` (many-to-many ผ่าน `CourseItems`) — ลบแบบ soft delete (`deletedAt`), ไม่มี `extraPrice` แล้ว
+- **Package** — `id, name, pricePerTable, menuLimit, description, features[], badge?, deletedAt?` → มีหลาย `PackageCourse`, มีหลาย `Booking` (ผ่าน `packageId`) — ลบแบบ soft delete
 - **PackageCourse** — `id, packageId, no, title, category, choose (0=รวมมาให้แล้ว/>0=เลือกได้กี่อย่าง), items[]`
-- **Booking** — `id, customerId?, customerName, date, timeSlot, tables, packageName, totalPrice, pricePerTable?, deliveryFee?, status(PENDING|CONFIRMED|COMPLETED|CANCELLED), location, locationDetail(json)?, menus[], phone, staffAuto/staffActual(json)?, staffNote?, staffSavedAt?, paymentSlipUrl?, paymentSlipUploadedAt?, createdAt` — index บน `customerId` และ `date`
-- **Settings** — แถวเดียวเสมอ (`id=1`): `shopName, shopNameEn, shopInitials, shopAddress, shopPhone, shopLine, depositRate(0–1), deliveryFee, freeDeliveryMinTables`
+- **Booking** — `id, customerId?, packageId?, customerName, date, timeSlot, tables, packageName, totalPrice, pricePerTable?, deliveryFee?, status(PENDING|CONFIRMED|COMPLETED|CANCELLED), location, locationDetail(json)?, menus[], phone, staffAuto/staffActual(json)?, staffNote?, staffSavedAt?, paymentSlipUrl?, paymentSlipUploadedAt?, createdAt` — index บน `customerId`, `date`, และ `createdAt`; ราคาทุกฟิลด์คำนวณที่ backend เสมอ ไม่รับจาก client ตรงๆ; กันจองซ้อนวันเดียวกันด้วย Postgres Serializable transaction ตอนสร้าง
+- **Settings** — แถวเดียวเสมอ (`id=1`): `shopName, shopNameEn, shopInitials, shopAddress, shopPhone, shopLine, depositRate(0–1), deliveryFee, freeDeliveryMinTables, version, updatedAt` — `version` ใช้กัน optimistic concurrency ตอนแก้ไข
+- **AuditLog** — `id, actorAuth0Sub, action, entityType, entityId, before(json)?, after(json)?, createdAt` — บันทึกการลบเมนู/แพ็กเกจ, แก้ไข booking, เปลี่ยน role
 
 ---
 
@@ -260,16 +272,15 @@ title: "Requirement Specification — ระบบจองแคทเธอร
 
 - **Env vars (frontend)**: `VITE_AUTH0_DOMAIN`, `VITE_AUTH0_CLIENT_ID`, `VITE_AUTH0_AUDIENCE` (ใส่เมื่อมี backend API พร้อมใช้)
 - **Env vars (backend)**: `PORT`, `DATABASE_URL`, `AUTH0_DOMAIN`, `AUTH0_AUDIENCE`, `FRONTEND_ORIGIN` (CORS, รองรับหลายค่าคั่นด้วย comma)
-- **Local dev DB**: `docker-compose.yml` รัน Postgres 16 บนพอร์ต 5434
+- **Production DB**: PostgreSQL บน Railway (`DATABASE_URL` ชี้ตรงเข้า production ไม่มี staging แยก — migration ทุกครั้งต้อง `pg_dump` backup ก่อนเสมอและเป็นแบบ additive-only เท่านั้น)
 - ภาษา UI หลักคือภาษาไทยทั้งระบบ
-- ยังไม่มี automated tests ในทั้งสองโปรเจกต์ (ไม่พบไฟล์ `*.test.*` / `*.spec.*`)
+- มี automated tests ทั้งสองโปรเจกต์ (backend: Jest ครอบคลุม service หลักทุกตัว; frontend: Vitest) และมี GitHub Actions CI (`.github/workflows/ci.yml`) รันแยก job backend/frontend
 
 ---
 
-## 8. Gaps / สิ่งที่ยังไม่ได้ทำ (จากการอ่านโค้ดปัจจุบัน)
+## 8. Gaps / สิ่งที่ยังไม่ได้ทำ
 
-1. **Frontend ยังไม่เชื่อมต่อ backend API จริง** — booking/เมนู/แพ็กเกจ/ค่าตั้งค่ายังเป็น local state + mock data (`src/data.ts`) ทั้งหมด แม้ backend REST API จะพร้อมใช้แล้ว
-2. ไม่มีการอัปโหลดไฟล์ (รูปเมนู/สลิปโอนเงิน) ขึ้น storage จริง — ปัจจุบันย่อขนาดแล้วเก็บเป็น data URL ในหน่วยความจำ/localStorage เท่านั้น (ไม่ persist ข้าม browser/device)
-3. ไม่มีระบบแจ้งเตือนแบบ real-time (หน้า Notifications เป็น placeholder)
-4. ไม่มี automated test coverage
-5. ไม่มีบทบาทที่ 3 เช่น พนักงาน/staff account
+1. รูปภาพ (เมนู/QR/สลิป) เก็บเป็นไฟล์บน disk ของ backend server เอง ยังไม่ได้ย้ายไป Railway Volume หรือ object storage ถาวร — เสี่ยงข้อมูลหายถ้า deploy แบบ ephemeral filesystem
+2. ไม่มีระบบแจ้งเตือนแบบ real-time (หน้า Notifications เป็น placeholder, ยังเป็น mock array คงที่)
+3. ไม่มีบทบาทที่ 3 เช่น พนักงาน/staff account
+4. ไม่มี payment gateway — ตรวจสอบสลิปโอนเงินด้วยมือโดยเจ้าของร้านเท่านั้น (เจตนา ไม่ใช่ gap ที่ต้องแก้)

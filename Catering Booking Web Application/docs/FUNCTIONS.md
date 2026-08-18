@@ -7,7 +7,7 @@ title: "Function Specification (ละเอียด) — ระบบจอง
 
 # Function Specification แบบละเอียด — ทั้งระบบ
 
-> เอกสารนี้ต่อยอดจาก [`REQUIREMENTS.md`](./REQUIREMENTS.md) โดยลงรายละเอียดระดับฟังก์ชัน/เมธอดจริงที่มีอยู่ในโค้ด (พารามิเตอร์ ตรรกะ เงื่อนไข validation) ทั้งฝั่ง Frontend และ Backend ณ วันที่ 2026-08-03
+> เอกสารนี้ต่อยอดจาก [`REQUIREMENTS.md`](./REQUIREMENTS.md) โดยลงรายละเอียดระดับฟังก์ชัน/เมธอดจริงที่มีอยู่ในโค้ด (พารามิเตอร์ ตรรกะ เงื่อนไข validation) ทั้งฝั่ง Frontend และ Backend ปรับปรุงล่าสุด 2026-08-18
 
 ---
 
@@ -46,7 +46,7 @@ Props: `name` (แสดงทักทาย), `onComplete: (profile: StoredPro
 
 | ฟังก์ชัน/ค่า | รายละเอียด |
 |---|---|
-| `role = roleFromAuth0User(auth0User)` | อ่าน custom claim จาก Auth0 user object → `'customer'` หรือ `'owner'` |
+| `role` | ถ้า `backendUser` (ผลลัพธ์ `GET /users/me`) โหลดมาแล้ว → ใช้ `backendUser.role === 'OWNER' ? 'owner' : 'customer'` เสมอ (DB คือความจริงหลัก); ถ้ายังไม่โหลดเสร็จ → fallback ชั่วคราวไปที่ `roleFromAuth0User(auth0User)` (อ่าน custom claim) — จำเป็นเพราะ role แก้ไขได้ภายหลังผ่านฟีเจอร์เลื่อน/ถอดสิทธิ์ owner (`UserRoles.tsx`) ซึ่ง claim เดิมจะไม่อัปเดตตาม |
 | `storedProfile = getStoredProfile(auth0User.sub)` | ดึงโปรไฟล์เสริม (เบอร์โทร/Line) จาก localStorage |
 | `needsProfile` | `true` เมื่อ login แล้ว, เป็น customer, และยังไม่มี `storedProfile` → บังคับไปหน้า `CompleteProfile` ก่อน |
 | `effectiveScreen` | ถ้า `screen === 'login'` และ login สำเร็จแล้วและไม่ต้องกรอกโปรไฟล์ → บังคับเป็น `'owner-dashboard'` (ถ้า role เป็น owner) หรือ `'home'` (ถ้าเป็น customer) |
@@ -126,7 +126,7 @@ Props: `name` (แสดงทักทาย), `onComplete: (profile: StoredPro
 | `handleConfirm()` | ปิด modal ยืนยัน → เรียก `onConfirm()` (สร้างใบจองจริงที่ `App.tsx`) → `navigate('history')` |
 | Modal ยืนยันการจอง | แสดงสรุปสั้น (วันที่, เวลา, สถานที่, โต๊ะ, แพ็กเกจ, จำนวนเมนู, ราคารวม) ก่อนกดยืนยันจริงอีกครั้ง |
 
-**`handleConfirm` ใน `App.tsx` (`onConfirm` prop)**: สร้าง object `Booking` ใหม่ — `id` แบบสุ่ม (`BK-2025-XXX`), คำนวณ `subtotal`/`deliveryFee`/`totalPrice` ซ้ำด้วยสูตรเดียวกับ Cart (กันไม่ให้ตัวเลขไม่ตรงกัน), สถานะเริ่มต้นเป็น `'pending'`, ที่อยู่แปลงผ่าน `formatFullAddress()`, แล้ว prepend เข้า array `bookings` และรีเซ็ต `booking` state กลับเป็นค่าเริ่มต้น (`initialBooking`)
+**`handleConfirm` ใน `App.tsx` (`onConfirm` prop)**: เรียก `POST /bookings` ผ่าน `api.ts` — ส่งเฉพาะ `date, timeSlot, tables, packageId, packageName, location, locationDetail, menus, lineId` **ไม่ส่งตัวเลขราคาใดๆ** (backend คำนวณ `pricePerTable/deliveryFee/totalPrice` เองเสมอจาก `PricingService`, ดูหัวข้อ 6.2) เลขที่ใบจอง (`BK-YYYY-NNN`) และเลขวิ่งออกจาก backend (`bookingCounter`) ไม่ใช่สุ่มฝั่ง client; ผลลัพธ์จาก backend ถูก prepend เข้า array `bookings` และรีเซ็ต `booking` state กลับเป็นค่าเริ่มต้น (`initialBooking`); ถ้า backend ตอบ 409 (มีใบจองอื่นชนวันเดียวกันไปแล้วระหว่างที่กำลังจอง) จะแสดง error ให้ผู้ใช้ลองใหม่
 
 ### 2.8 `BookingHistory.tsx`
 
@@ -134,8 +134,8 @@ Props: `name` (แสดงทักทาย), `onComplete: (profile: StoredPro
 |---|---|---|
 | `filtered` | `search` + `statusFilter` → รายการที่กรองแล้ว | match ตาม `id` (case-insensitive) หรือ `customerName` (ตรงตัว) และ `status` |
 | `openDetail(id)` / `closeDetail()` | – | เปิด/ปิด modal รายละเอียด, รีเซ็ต state ของสลิปโอนเงินทุกครั้ง |
-| `handlePickSlip(bookingId, file)` | ไฟล์รูปที่เลือก → `slipDraft` | เรียก `pickImageAsDataUrl(file)` เพื่อย่อขนาด+แปลงเป็น data URL; ถ้า error (ไฟล์ไม่ใช่รูป/ใหญ่เกิน 8MB) ตั้ง `slipError`; **ยังไม่บันทึกเข้าใบจองจนกว่าจะกด "ส่งสลิป"** |
-| `submitSlip()` | – | Validation: ต้องมี `slipDraft` ก่อน → เรียก `onUpdateBooking(id, { paymentSlip, paymentSlipUploadedAt: now })`, เคลียร์ draft, ตั้ง `slipSent = true` |
+| `handlePickSlip(bookingId, file)` | ไฟล์รูปที่เลือก → `slipDraft` | เรียก `pickImageAsDataUrl(file)` เพื่อย่อขนาด+แปลงเป็น data URL (แค่ preview ในเครื่อง); ถ้า error (ไฟล์ไม่ใช่รูป/ใหญ่เกิน 8MB) ตั้ง `slipError`; **ยังไม่อัปโหลด/บันทึกเข้าใบจองจนกว่าจะกด "ส่งสลิป"** |
+| `submitSlip()` | – | Validation: ต้องมี `slipDraft` ก่อน → อัปโหลดจริงผ่าน `onUploadImage('payment-slip', slipDraft)` ก่อน แล้วเรียก `onUpdateBooking(id, { paymentSlipUrl, paymentSlipUploadedAt: now })` ด้วย path สั้นที่ backend คืนมา, เคลียร์ draft, ตั้ง `slipSent = true` |
 | ปุ่ม "ใบเสนอ" / "ใบจอง" | – | เปิด `docView` พร้อม `type: 'quotation' \| 'booking'` แสดงผ่าน `BookingDocument`, มีปุ่มสลับดูอีกฉบับของงานเดียวกันได้ในตัว modal |
 | ปุ่ม "พิมพ์ / บันทึก PDF" | – | เรียก `window.print()` ตรง ๆ (CSS class `print-area`/`no-print` ควบคุมว่าอะไรถูกซ่อนตอนพิมพ์) |
 
@@ -167,8 +167,8 @@ Props: `name` (แสดงทักทาย), `onComplete: (profile: StoredPro
 
 | ฟังก์ชัน | Input → Output | ตรรกะ |
 |---|---|---|
-| `filtered` | `search` → รายการที่กรอง | match `customerName` หรือ `id` (substring, case-sensitive) |
-| `updateStatus(id, status)` | – | เรียก `onUpdateBooking(id, { status })` ตรง ๆ |
+| โหลดรายการ | `search` (debounce), `page` | เรียก `onFetchBookingsPage()` (`GET /bookings/page`) แบบแบ่งหน้า+ค้นหาฝั่ง backend แทนกรองทั้งก้อนฝั่ง client (แก้ปัญหาโหลดช้าเมื่อจำนวนใบจองเยอะ — เดิม query ยัง join ข้อมูล `customer` ที่ไม่ได้ใช้แสดงผลจริงด้วย ตัดออกแล้ว); มี UI เลื่อนหน้าก่อน/ถัดไปพร้อมเลขหน้า/จำนวนรวม |
+| `updateStatus(id, status)` | – | เรียก `onUpdateBooking(id, { status })` ตรง ๆ (endpoint นี้ยังคง audit log การเปลี่ยนแปลงไว้ที่ backend) |
 | `staffTotalOf(b)` | booking → จำนวนพนักงานรวม | ใช้ `b.staffActual` ถ้ามี มิฉะนั้นคำนวณจาก `calculateStaff(b.tables)` |
 | `openBooking(booking)` | – | ตั้ง `selectedId`, seed `staffDraft` จาก `staffActual` หรือค่าที่คำนวณอัตโนมัติ, seed `noteDraft` จาก `staffNote` |
 | `adjustStaff(key, delta)` | ตำแหน่งพนักงาน + ค่าเปลี่ยน → อัปเดต draft | ปรับ `staffDraft[key] += delta` ไม่ให้ต่ำกว่า 0 |
@@ -207,10 +207,10 @@ Props: `name` (แสดงทักทาย), `onComplete: (profile: StoredPro
 
 | ฟังก์ชัน | Input → Output | ตรรกะ |
 |---|---|---|
-| `handlePickImage(file)` | ไฟล์ → `form.image` (data URL) | เรียก `pickImageAsDataUrl()`; error (ไม่ใช่รูป/เกิน 8MB) แสดงใน `imageError` |
+| `handlePickImage(file)` | ไฟล์ → `form.image` | เรียก `pickImageAsDataUrl()` ย่อขนาดฝั่ง client ก่อน (error ถ้าไม่ใช่รูป/เกิน 8MB แสดงใน `imageError`), แล้วอัปโหลดจริงผ่าน `onUploadImage('menu-image', dataUrl)` → เก็บ path สั้นที่ backend คืนมา (`/uploads/...`) ไว้ใน `form.image` แทน data URL |
 | `usageOf(id)` | menuId → รายชื่อแพ็กเกจที่ใช้เมนูนี้ | ค้นทุก `packages[].courses[].items` ที่มี id ตรงกัน |
 | `canSave` | – | ต้องมีชื่อเมนู (trim แล้วไม่ว่าง) |
-| `handleSave()` | – | ถ้าแก้ไข: ใช้ `id` เดิม, คง `active` เดิม; ถ้าเพิ่มใหม่: สร้าง id `menu-${timestamp}`, `active: true`; `extraPrice`/`image` ใส่เฉพาะเมื่อมีค่า > 0 / ไม่ว่าง — เรียก `onSaveMenu(item)` (ที่ `App.tsx` จะ sync เข้าไปในทุกแพ็กเกจที่ใช้เมนูนี้อยู่ด้วย) |
+| `handleSave()` | – | ถ้าแก้ไข: ใช้ `id` เดิม, คง `active` เดิม; ถ้าเพิ่มใหม่: สร้าง id `menu-${timestamp}`, `active: true`; **ส่ง `image: form.image.trim()` เสมอ** แม้เป็นค่าว่าง (จุดนี้เคยเป็นบั๊ก — เดิมส่งเฉพาะเมื่อไม่ว่าง ทำให้กดปุ่ม "ลบรูป" แล้วบันทึกไม่ลบรูปจริง) — เรียก `onSaveMenu(item)` (ที่ `App.tsx` จะ sync เข้าไปในทุกแพ็กเกจที่ใช้เมนูนี้อยู่ด้วย); backend จะลบไฟล์รูปเก่าทิ้งอัตโนมัติถ้ารูปเปลี่ยนหรือถูกล้าง (ไม่มี `extraPrice` แล้ว — เอาออกจากฟอร์มทั้งหมด) |
 | `toggleActive(item)` | – | สลับ `active` ระหว่าง true/false (เปิด/ปิดการแสดงเมนูฝั่งลูกค้า) โดยไม่ลบข้อมูล |
 | ลบเมนู (`confirmDelete` → `onDeleteMenu`) | – | ต้องกดยืนยันใน modal ก่อน; ข้อความเตือนจะบอกจำนวนแพ็กเกจที่ใช้เมนูนี้อยู่ถ้ามี — ลบแล้ว `App.tsx` จะถอดเมนูออกจากทุก course ที่ใช้อยู่ด้วย |
 
@@ -224,16 +224,16 @@ Props: `name` (แสดงทักทาย), `onComplete: (profile: StoredPro
 | ปุ่มพิมพ์ (ในลิสต์) | ตั้ง `previewBooking` แล้ว `setTimeout(() => window.print(), 100)` — หน่วงเล็กน้อยให้ preview render ก่อนสั่งพิมพ์ |
 | ปุ่มพิมพ์ (ใน preview) | เรียก `window.print()` ทันที |
 
-### 3.7 `Customers.tsx`
+### 3.7 `UserRoles.tsx` (แทนที่ `Customers.tsx` ที่ถูกลบออกจากระบบ)
 
 | ฟังก์ชัน | Input → Output | ตรรกะ |
 |---|---|---|
-| `groupByCustomer(bookings)` | รายการใบจอง → `CustomerSummary[]` | key = `phone` ถ้ามีและไม่ใช่ `'—'` มิฉะนั้น key = `name:${customerName}`; รวม `bookings[]`, `totalSpent` (ไม่นับงานยกเลิก), `lastDate` (ล่าสุด) ต่อกลุ่ม; ผลลัพธ์เรียงตาม `lastDate` ใหม่สุดก่อน |
-| `filtered` | `search` → รายชื่อลูกค้าที่กรอง | match `name` หรือ `phone` |
-| สรุปด้านบน | – | จำนวนลูกค้าทั้งหมด, จำนวนลูกค้าที่จอง > 1 ครั้ง, ยอดใช้จ่ายรวมทั้งหมด |
-| คลิกแถวลูกค้า | – | เปิด modal แสดงประวัติการจองทั้งหมดของลูกค้านั้น เรียงวันที่ล่าสุดก่อน |
+| `loadOwners()` | – | เรียก `onListOwners()` (`GET /users/owners`) ครั้งแรกตอน mount และหลังทำรายการ promote/demote ทุกครั้ง เพื่อ refresh รายชื่อ owner ด้านบนให้ตรงสถานะล่าสุด |
+| debounce ช่องค้นหา (300ms) → auto-search | `email` state | ยิง `onSearchUser(debouncedEmail)` (`GET /users/search?email=`) อัตโนมัติเมื่อพิมพ์ตั้งแต่ 3 ตัวอักษรขึ้นไป (ค้นแบบ `contains`, ไม่สนตัวพิมพ์เล็กใหญ่, พิมพ์บางส่วนก็เจอ) |
+| `handleSetRole(user, role)` | – | เรียก `onSetRole(user.id, role)` (`PATCH /users/:id/role`); อัปเดต `results` ในหน้าให้ตรงทันที แล้วเรียก `loadOwners()` ซ้ำเพื่อ sync รายชื่อ owner; แสดง error จาก backend ตรงๆ ถ้าเจอ (เช่น "ต้องมี owner อย่างน้อย 1 คนเสมอ") |
+| ปุ่มถอดสิทธิ์ของแถวตัวเอง | – | ถูก `disabled` เสมอเมื่อ `user.auth0Sub === currentAuth0Sub` (เทียบกับ owner ที่ login อยู่ตอนนี้) — กันเผลอถอดสิทธิ์ตัวเองที่ UI ชั้นหนึ่งก่อนถึง backend |
 
-หน้านี้เป็น **read-only** ทั้งหมด (ไม่มีฟังก์ชันแก้ไข/ลบลูกค้า เพราะไม่มีระบบสมาชิกแยก)
+ผู้ใช้ที่ค้นหาเจอต้องเคย login เข้าระบบมาแล้วอย่างน้อย 1 ครั้ง (มี `User` record อยู่แล้ว) — ยังไม่รองรับ pre-authorize อีเมลที่ไม่เคย login
 
 ### 3.8 `Settings.tsx`
 
@@ -374,33 +374,37 @@ Presentational: ถ้า `item.image` มีค่า → แสดงรูป
 
 ## 6. Backend — REST API (NestJS)
 
-ทุก endpoint อยู่หลัง `@UseGuards(JwtAuthGuard, RolesGuard)` (ยกเว้น `UsersController` ที่มีแค่ `JwtAuthGuard`) — `JwtAuthGuard` ตรวจสอบว่ามี Bearer token ที่ valid (เซ็นโดย Auth0, ตรวจผ่าน JWKS); `RolesGuard` เช็คว่า custom claim role ตรงกับที่ `@Roles(...)` ระบุไว้ (ไม่ใส่ `@Roles` = ผ่านได้ทุก role ที่ login แล้ว)
+ทุก endpoint อยู่หลัง `@UseGuards(JwtAuthGuard, RolesGuard)` (ยกเว้น `UsersController` ที่มีแค่ `JwtAuthGuard` สำหรับ `/users/me`) — `JwtAuthGuard` ตรวจสอบว่ามี Bearer token ที่ valid (เซ็นโดย Auth0, ตรวจผ่าน JWKS); `RolesGuard` เช็ค role จาก **DB** (query `User.role` ด้วย `auth0Sub`, cache ในหน่วยความจำ 5 วินาที, fallback ไปอ่าน JWT claim ถ้ายังไม่มี `User` record) ให้ตรงกับที่ `@Roles(...)` ระบุไว้ (ไม่ใส่ `@Roles` = ผ่านได้ทุก role ที่ login แล้ว) ทั้งแอปยังมี `ThrottlerModule` ระดับ global (60 req/นาที) และ `helmet` security headers ผ่าน `app.module.ts`/`main.ts`
 
 ### 6.1 `UsersController` (`/users`)
 
 | Endpoint | Guard/Role | ฟังก์ชัน service | ตรรกะ |
 |---|---|---|---|
-| `GET /users/me` | login แล้วเท่านั้น | `UsersService.findOrCreate(profile)` | อ่าน role จาก JWT claim (`owner`/`customer`); ถ้ามี `User` ที่ `auth0Sub` ตรงอยู่แล้ว **คืนของเดิมไม่แก้ไข** (ไม่ sync ชื่อ/รูปที่เปลี่ยนจาก Auth0 ภายหลัง); ถ้าไม่มีสร้างใหม่ด้วยข้อมูลจาก JWT (`given_name`/`name`, `family_name`, `email`, `picture`) |
+| `GET /users/me` | login แล้วเท่านั้น | `UsersService.findOrCreate(profile)` (เรียก `syncProfile` ภายใน) | login ครั้งแรก: สร้าง `User` ใหม่ด้วยข้อมูลจาก JWT (`given_name`/`name`, `family_name`, `email`, `picture`) และตั้ง `role` เริ่มต้นจาก JWT claim; login ครั้งถัดไป: อัปเดตแค่ชื่อ/รูปที่เปลี่ยนจาก Auth0 **ไม่แตะ `role` อีก** (กันไม่ให้ทับ role ที่ owner ตั้งไว้ผ่าน FR-O13) |
 | `PATCH /users/me` | login แล้วเท่านั้น | `UsersService.updateProfile(auth0Sub, dto)` | อัปเดต field ตาม `UpdateProfileDto` (เบอร์โทร/Line ID ที่ Auth0 ไม่มี) โดย `where: { auth0Sub }` |
+| `GET /users/search?email=` | `@Roles('owner')` | `UsersService.findByEmail(email)` | `contains` + `mode: 'insensitive'`, จำกัด 20 ผลลัพธ์ — พิมพ์อีเมลบางส่วนก็ค้นเจอ |
+| `GET /users/owners` | `@Roles('owner')` | `UsersService.findOwners()` | คืนทุก `User` ที่ `role === OWNER` เรียงตาม `createdAt` |
+| `PATCH /users/:id/role` | `@Roles('owner')` | `UsersService.setRole(id, role)` | เช็คว่า target user มีอยู่จริงก่อน (404 ถ้าไม่พบ); ถ้าจะถอดสิทธิ์ owner (`role → CUSTOMER`) ต้องเช็คว่ามี owner คนอื่นเหลืออยู่อย่างน้อย 1 คน (`count({role: OWNER, id: {not: id}})`) มิฉะนั้น throw `400 BadRequestException`; สำเร็จแล้วบันทึก `AuditLog` (`user.role.promote`/`user.role.demote`) |
 
 ### 6.2 `BookingsController` (`/bookings`)
 
 | Endpoint | Guard/Role | ฟังก์ชัน service | ตรรกะ |
 |---|---|---|---|
-| `GET /bookings` | login แล้ว (ไม่จำกัด role เฉพาะ แต่ผลต่างกันตาม role) | `findAllForOwner()` หรือ `findAllForCustomer(userId)` | ถ้า JWT role = owner → คืนทุกใบจอง (`orderBy: createdAt desc`); ถ้าเป็น customer → sync/หา user record ก่อน (`syncCustomer`) แล้วคืนเฉพาะที่ `customerId` ตรงกับตัวเอง |
-| `POST /bookings` | `@Roles('customer')` | `create(customerId, customerName, phone, dto)` | sync user ก่อนเสมอ (`syncCustomer`), ใช้ `customerName`/`phone` จาก user record ที่ sync มา (ไม่รับจาก request body); สร้าง booking ด้วยค่าที่ client ส่งมาผ่าน `CreateBookingDto` (ดูหัวข้อ 7) |
-| `PATCH /bookings/:id` | `@Roles('owner')` | `updateAsOwner(id, dto)` | เช็คว่ามี booking นั้นจริงก่อน (`assertExists` → 404 ถ้าไม่พบ); อัปเดตเฉพาะ `status`, `staffActual`, `staffNote`; **ถ้ามี `staffActual` ส่งมาจะเซ็ต `staffSavedAt = now` อัตโนมัติ** |
-| `PATCH /bookings/:id/payment-slip` | `@Roles('customer')` | `updatePaymentSlipAsCustomer(id, customerId, url)` | sync user ก่อน, เช็คว่า booking มีอยู่จริง (404) และ **`booking.customerId` ต้องตรงกับผู้เรียก** มิฉะนั้น throw `403 ForbiddenException` ("ไม่มีสิทธิ์แก้ไขใบจองนี้"); อัปเดต `paymentSlipUrl` + `paymentSlipUploadedAt = now` |
+| `GET /bookings` | login แล้ว (ผลต่างกันตาม role) | `findAllForOwner()` หรือ `findAllForCustomer(userId)` | ถ้า role (จาก DB) = owner → คืนทุกใบจอง (`orderBy: createdAt desc`); ถ้าเป็น customer → sync/หา user record ก่อน (`syncCustomer`) แล้วคืนเฉพาะที่ `customerId` ตรงกับตัวเอง |
+| `GET /bookings/page` | login แล้ว (ผลต่างกันตาม role) | `findPageForOwner()` / `findPageForCustomer()` | รองรับ `page`, `search` (match รูปแบบ `BK-YYYY-NNN` หรือ `customerName contains`), `status`; ใช้ `Promise.all` (ไม่ใช้ `$transaction`) รัน query นับจำนวน+ดึงหน้าคู่ขนาน; **ไม่ include ความสัมพันธ์ `customer`** (ตัดออกเพราะไม่ได้ใช้จริง แก้ปัญหาโหลดช้า) |
+| `POST /bookings` | `@Roles('customer')` | `create(customerId, customerName, phone, dto)` | sync user ก่อนเสมอ (`syncCustomer`), ใช้ `customerName`/`phone` จาก user record ที่ sync มา (ไม่รับจาก request body); **คำนวณราคาที่ backend เองเสมอ** ผ่าน `PricingService.priceFor(packageId, tables, location)` (ไม่รับ `totalPrice`/`pricePerTable`/`deliveryFee` จาก client — ดู `CreateBookingDto` หัวข้อ 7); ตรวจว่าเมนูที่เลือกมีอยู่จริงทุกรายการ (`assertMenusAvailable`); เช็คว่าวันที่จองยังไม่มีใบจองอื่นชนอยู่ (สถานะ pending/confirmed/completed) ภายใน transaction ระดับ **Serializable isolation** (`Prisma.TransactionIsolationLevel.Serializable`) — ถ้าชน throw `409 ConflictException`; ถ้า Postgres เจอ serialization conflict จริง (error code `P2034`, เกิดจาก race กันจองพร้อมกัน) จะจับแล้วแปลงเป็น `409 ConflictException` ที่อ่านง่ายเช่นกัน |
+| `PATCH /bookings/:id` | `@Roles('owner')` | `updateAsOwner(id, dto)` | เช็คว่ามี booking นั้นจริงก่อน (`assertExists` → 404 ถ้าไม่พบ); อัปเดตเฉพาะ `status`, `staffActual`, `staffNote`; **ถ้ามี `staffActual` ส่งมาจะเซ็ต `staffSavedAt = now` อัตโนมัติ**; บันทึก `AuditLog` ทุกครั้งที่แก้ |
+| `PATCH /bookings/:id/payment-slip` | `@Roles('customer')` | `updatePaymentSlipAsCustomer(id, customerId, url)` | sync user ก่อน, เช็คว่า booking มีอยู่จริง (404) และ **`booking.customerId` ต้องตรงกับผู้เรียก** มิฉะนั้น throw `403 ForbiddenException` ("ไม่มีสิทธิ์แก้ไขใบจองนี้"); อัปเดต `paymentSlipUrl` + `paymentSlipUploadedAt = now`; ถ้ามีสลิปเก่าอยู่ก่อนหน้าจะลบไฟล์เก่าทิ้งด้วย (`uploads.deleteManagedFile()`) |
 | `syncCustomer(jwtUser)` (private) | – | `UsersService.findOrCreate(...)` | helper ใช้ร่วมกันใน `create` และ `uploadSlip` — บังคับ role เป็น `CUSTOMER` เสมอไม่ว่า JWT จะมี claim อะไร |
 
 ### 6.3 `MenusController` (`/menus`)
 
 | Endpoint | Guard/Role | ฟังก์ชัน service | ตรรกะ |
 |---|---|---|---|
-| `GET /menus` | login แล้ว (ทุก role) | `findAll()` | คืนทั้งหมด เรียงตามชื่อ (`orderBy: name asc`) — **ไม่กรอง `active`** (ฝั่ง frontend ต้องกรองเองถ้าต้องการซ่อนเมนูที่ปิดใช้งาน) |
+| `GET /menus` | login แล้ว (ทุก role) | `findAll()` | คืนเฉพาะ `deletedAt: null` เรียงตามชื่อ (`orderBy: name asc`) — **ไม่กรอง `active`** (ฝั่ง frontend ต้องกรองเองถ้าต้องการซ่อนเมนูที่ปิดใช้งาน) |
 | `POST /menus` | `@Roles('owner')` | `create(dto)` | สร้างตรงจาก `CreateMenuItemDto` |
-| `PATCH /menus/:id` | `@Roles('owner')` | `update(id, dto)` | อัปเดตตาม `UpdateMenuItemDto` (partial) |
-| `DELETE /menus/:id` | `@Roles('owner')` | `remove(id)` | ลบ — ความสัมพันธ์ many-to-many กับ `PackageCourse` (ผ่าน `CourseItems`) จะถูก Prisma ตัดออกอัตโนมัติ ไม่ต้องลบ manual |
+| `PATCH /menus/:id` | `@Roles('owner')` | `update(id, dto)` | อัปเดตตาม `UpdateMenuItemDto` (partial); ถ้า `dto.image` เปลี่ยน (รวมถึงเปลี่ยนเป็นค่าว่าง) จะลบไฟล์รูปเก่าทิ้งอัตโนมัติผ่าน `uploads.deleteManagedFile()` |
+| `DELETE /menus/:id` | `@Roles('owner')` | `remove(id)` | **Soft delete** — ตั้ง `deletedAt = now` แทนลบจริง, บันทึก `AuditLog`; ความสัมพันธ์ many-to-many กับ `PackageCourse` (ผ่าน `CourseItems`) ยังคงอยู่ |
 
 ### 6.4 `PackagesController` (`/packages`)
 
@@ -408,22 +412,36 @@ Presentational: ถ้า `item.image` มีค่า → แสดงรูป
 |---|---|---|---|
 | `GET /packages` | login แล้ว (ทุก role) | `findAll()` | คืนพร้อม `courses` (เรียงตาม `no`) และ `items` ของแต่ละ course (nested include) |
 | `POST /packages` | `@Roles('owner')` | `create(dto)` | สร้าง `Package` พร้อม `PackageCourse` ซ้อนในคำสั่งเดียว (`create` nested); แต่ละ course เชื่อมกับเมนูที่มีอยู่แล้วผ่าน `connect: itemIds.map(id => ({id}))` (ไม่ได้สร้างเมนูใหม่ตรงนี้); `description`/`features` มีค่า default ว่างถ้าไม่ส่งมา |
-| `PATCH /packages/:id` | `@Roles('owner')` | `update(id, dto)` | อัปเดตเฉพาะ field ระดับ `Package` เอง (**ไม่รองรับแก้ `courses` ผ่าน endpoint นี้** — ต้องมี endpoint แยกหรือแก้ผ่าน Prisma Studio/migration เพิ่มถ้าต้องการ) |
-| `DELETE /packages/:id` | `@Roles('owner')` | `remove(id)` | ลบ package (cascade ลบ `PackageCourse` ที่เกี่ยวข้องตาม `onDelete: Cascade` ใน schema) |
+| `PATCH /packages/:id` | `@Roles('owner')` | `update(id, dto)` | ถ้าส่ง `courses` มาและ **เนื้อหาเหมือนกับที่บันทึกอยู่เป๊ะ** (`coursesUnchanged()` เทียบ) จะข้ามการลบ+สร้าง course ใหม่ทั้งหมด อัปเดตแค่ field ระดับ `Package` เอง — แก้ปัญหาบันทึกช้า (~20s) จากการลบ+สร้างคอร์สใหม่ทุกครั้งแม้ไม่มีอะไรเปลี่ยน; ถ้า `courses` เปลี่ยนจริงยังคงลบ-สร้างใหม่ทั้งหมดเหมือนเดิม |
+| `DELETE /packages/:id` | `@Roles('owner')` | `remove(id)` | **Soft delete** — ตั้ง `deletedAt = now`, บันทึก `AuditLog` (ก่อนหน้านี้ลบจริง+cascade `PackageCourse`) |
 
 ### 6.5 `SettingsController` (`/settings`)
 
 | Endpoint | Guard/Role | ฟังก์ชัน service | ตรรกะ |
 |---|---|---|---|
 | `GET /settings` | login แล้ว (ทุก role) | `get()` | อ่านแถว `id=1`; **ถ้ายังไม่มีแถวจะสร้างด้วยค่า `DEFAULT_SETTINGS` ให้อัตโนมัติ** (lazy-init แบบ singleton row) |
-| `PATCH /settings` | `@Roles('owner')` | `update(dto)` | เรียก `get()` ก่อนเพื่อรับประกันว่าแถว `id=1` มีอยู่แล้ว จากนั้น `update` ด้วย field ที่ส่งมา (partial) |
+| `PATCH /settings` | `@Roles('owner')` | `update(dto)` | เรียก `get()` ก่อนเพื่อรับประกันว่าแถว `id=1` มีอยู่แล้ว จากนั้น `updateMany({where:{id:1, version: expectedVersion}})` — ถ้า `count === 0` (แปลว่า `version` ไม่ตรง คนอื่นแก้ไปก่อนแล้ว) throw `409 ConflictException`; สำเร็จแล้ว `version` เพิ่มขึ้น 1; ถ้า `promptPayQr` เปลี่ยน/ถูกล้าง จะลบไฟล์ QR เก่าทิ้งด้วย |
 
-### 6.6 Auth infrastructure (ใช้ร่วมทุก endpoint)
+### 6.6 `UploadsController` (`/uploads`)
+
+| Endpoint | Guard/Role | ตรรกะ |
+|---|---|---|
+| `POST /uploads/menu-image` | `@Roles('owner')` | รับ data URL ผ่าน `UploadDataUrlDto`, เขียนไฟล์ลง `UPLOADS_DIR/menu-image/{uuid}.{ext}`, คืน path สั้น `/uploads/menu-image/...` |
+| `POST /uploads/promptpay-qr` | `@Roles('owner')` | เหมือนกันแต่ลง `UPLOADS_DIR/promptpay-qr/` |
+| `POST /uploads/payment-slip` | `@Roles('customer')` | เหมือนกันแต่ลง `UPLOADS_DIR/payment-slip/` |
+
+ทั้ง 3 endpoint อยู่หลัง `@Throttle({default:{limit:10, ttl:60_000}})` ระดับ controller (จำกัด 10 ครั้ง/นาที กันโดน spam เปลืองพื้นที่ disk); ไฟล์ถูก serve ผ่าน `app.useStaticAssets(UPLOADS_DIR, {prefix:'/uploads/'})` ใน `main.ts`; `UploadsService.deleteManagedFile()` มีการป้องกัน path traversal (ตรวจ path ที่จะลบต้องอยู่ใต้ `UPLOADS_DIR` จริง)
+
+### 6.7 `AuditService` (ใช้ภายใน ไม่มี endpoint เขียนตรง)
+
+`AuditService.log(actorAuth0Sub, action, entityType, entityId, before?, after?)` — เขียนแถวลงตาราง `AuditLog`; ออกแบบเป็น **best-effort ไม่มีวัน throw** (catch error ภายในแล้ว log เฉยๆ) เพื่อไม่ให้การบันทึก audit ที่ล้มเหลวไปบล็อก operation หลักที่ผู้ใช้กำลังรอผลอยู่
+
+### 6.8 Auth infrastructure (ใช้ร่วมทุก endpoint)
 
 | ไฟล์ | ฟังก์ชัน |
 |---|---|
 | `jwt.strategy.ts` | `JwtStrategy.validate(payload)` — คืน payload ทั้งก้อนเป็น `request.user` (ไม่แปลง/กรองอะไร); การยืนยันลายเซ็น RS256 ทำโดย `passport-jwt` + `jwks-rsa` ก่อนถึงจุดนี้ (cache JWKS, rate-limit 5 req/min) |
-| `roles.guard.ts` | `RolesGuard.canActivate()` — อ่าน metadata จาก `@Roles()` (ผ่าน `Reflector`, รวมทั้งระดับ method และ class); ถ้าไม่ได้ประกาศ roles ผ่านเลย; มิฉะนั้นเทียบ `AUTH0_ROLE_CLAIM` ใน JWT กับ role ที่อนุญาต, ไม่ตรง throw `403 ForbiddenException` |
+| `roles.guard.ts` | `RolesGuard.canActivate()` — อ่าน metadata จาก `@Roles()` (ผ่าน `Reflector`, รวมทั้งระดับ method และ class); ถ้าไม่ได้ประกาศ roles ผ่านเลย; มิฉะนั้น query role จริงจาก DB (`User.role` โดย `auth0Sub`, cache ในหน่วยความจำ 5 วินาที; fallback เป็น JWT claim ถ้ายังไม่มี `User` record) เทียบกับ role ที่อนุญาต, ไม่ตรง throw `403 ForbiddenException` |
 | `roles.decorator.ts` | `@Roles(...roles)` — เก็บ metadata ผ่าน `SetMetadata(ROLES_KEY, roles)` |
 | `current-user.decorator.ts` | `@CurrentUser()` — param decorator ดึง `request.user` (payload ของ JWT) มาใช้ในสวยงาม |
 
@@ -435,21 +453,22 @@ Presentational: ถ้า `item.image` มีค่า → แสดงรูป
 
 | DTO | Field และกฎ |
 |---|---|
-| `CreateBookingDto` | `date: string`, `timeSlot: string`, `tables: int ≥1`, `packageName: string`, `totalPrice: int ≥0`, `pricePerTable?: int`, `deliveryFee?: int`, `location: string`, `locationDetail?: unknown` (ไม่ validate โครงสร้างภายใน), `menus: string[]` |
+| `CreateBookingDto` | `date: string` (ต้องตรง `/^\d{4}-\d{2}-\d{2}$/`), `timeSlot: string`, `tables: int` (`1–500`), `packageId: string`, `packageName: string`, `location: string`, `locationDetail?: LocationDetailDto` (nested, ใช้แสดงผลเท่านั้น ไม่ใช้คำนวณราคา), `menus: string[]`, `lineId?: string` — **ไม่มี field ราคาใดๆ** (`totalPrice`/`pricePerTable`/`deliveryFee` ถูกถอดออกโดยเจตนา backend คำนวณเองเสมอผ่าน `PricingService`) |
 | `UpdateBookingDto` | `status?: BookingStatus` (enum: PENDING/CONFIRMED/COMPLETED/CANCELLED), `staffActual?: unknown`, `staffNote?: string` — ทุก field optional |
-| `UpdatePaymentSlipDto` | (ไม่ได้เปิดอ่านในรอบนี้ แต่ใช้ใน controller เป็น `{ paymentSlipUrl: string }`) |
+| `UpdatePaymentSlipDto` | `{ paymentSlipUrl: string }` |
 | `UpdateProfileDto` | field โปรไฟล์ optional (เบอร์โทร/Line ฯลฯ) |
-| `CreateMenuItemDto` / `UpdateMenuItemDto` | ฟิลด์ตาม `MenuItem` model (name, category, description, image, extraPrice, active) — update เป็น partial ทั้งหมด |
-| `CreatePackageDto` / `UpdatePackageDto` | ฟิลด์ตาม `Package` + `courses[]` (`no`, `title`, `category`, `choose`, `itemIds: string[]`) สำหรับ create; update เป็น partial และ **ไม่รวม `courses`** |
-| `UpdateSettingsDto` | ทุก field optional: `shopName/shopNameEn/shopInitials/shopAddress/shopPhone/shopLine: string`, `depositRate: number` (0–1), `deliveryFee: int ≥0`, `freeDeliveryMinTables: int ≥0` |
+| `CreateMenuItemDto` / `UpdateMenuItemDto` | ฟิลด์ตาม `MenuItem` model (name, category, description, image, costPrice, active) — **ไม่มี `extraPrice` แล้ว**; `image` รับ pattern `/^(\/uploads\/.+)?$/` (อนุญาตค่าว่างเพื่อรองรับการ "ลบรูป") — update เป็น partial ทั้งหมด |
+| `CreatePackageDto` / `UpdatePackageDto` | ฟิลด์ตาม `Package` + `courses[]` (`no`, `title`, `category`, `choose`, `itemIds: string[]`) สำหรับ create; update รับ `courses` ได้เช่นกัน (ดูหัวข้อ 6.4 — ข้ามการเขียนใหม่ถ้าเนื้อหาไม่เปลี่ยน) |
+| `UpdateSettingsDto` | ทุก field optional: `shopName/shopNameEn/shopInitials/shopAddress/shopPhone/shopLine: string`, `depositRate: number` (0–1), `deliveryFee: int ≥0`, `freeDeliveryMinTables: int ≥0`, `expectedVersion: int` (ใช้เช็ค optimistic concurrency กับ `Settings.version`) |
+| `SetRoleDto` | `role: Role` (enum `CUSTOMER`/`OWNER`, ผ่าน `@IsEnum`) |
+| `LocationDetailDto` | nested DTO ของ `locationDetail` — `zone`/`distanceKm` รับมาเพื่อแสดงผลเท่านั้น backend ไม่เชื่อค่านี้ตอนคำนวณราคา (คำนวณ zone/distance เองใหม่จากพิกัดเสมอ) |
 
 ---
 
 ## หมายเหตุปิดท้าย
 
-เอกสารนี้สะท้อนพฤติกรรมจริงของโค้ด ไม่ใช่ข้อกำหนดในอุดมคติ — จุดที่ควรระวังเมื่อนำไปพัฒนาต่อ (ดูเพิ่มเติมที่ [`REQUIREMENTS.md#8-gaps--สิ่งที่ยังไม่ได้ทำ`](./REQUIREMENTS.md#8-gaps--สิ่งที่ยังไม่ได้ทำ-จากการอ่านโค้ดปัจจุบัน)):
+เอกสารนี้สะท้อนพฤติกรรมจริงของโค้ด ไม่ใช่ข้อกำหนดในอุดมคติ — จุดที่ควรระวังเมื่อนำไปพัฒนาต่อ (ดูเพิ่มเติมที่ [`REQUIREMENTS.md#8-gaps--สิ่งที่ยังไม่ได้ทำ`](./REQUIREMENTS.md#8-gaps--สิ่งที่ยังไม่ได้ทำ)):
 
-- Frontend ทั้งหมดยังทำงานบน local state/mock data — ฟังก์ชัน backend ในหัวข้อ 6–7 **ยังไม่ถูกเรียกใช้จริงจาก UI**
-- `PATCH /packages/:id` ยังแก้ `courses` ไม่ได้ (ต้องลบ-สร้างใหม่ทั้งแพ็กเกจถ้าต้องการแก้รายการอาหารในข้อ)
-- `dayStatus()` ตีความว่า 1 booking = เต็มทั้งวัน ทำให้ `SLOT_CAPACITY` (500 โต๊ะ/ช่วง) ที่นิยามไว้ไม่เคยถูกใช้จำกัดจริงในทางปฏิบัติ
-- สลิปโอนเงินและรูปเมนูเก็บเป็น data URL ในหน่วยความจำ/localStorage/DB text field โดยตรง ยังไม่มี object storage จริง
+- `dayStatus()` ยังตีความว่า 1 booking = เต็มทั้งวัน (BR-02) ทำให้ `SLOT_CAPACITY` (500 โต๊ะ/ช่วง) ที่นิยามไว้ไม่เคยถูกใช้จำกัดจริงในทางปฏิบัติ — เป็นกติกาธุรกิจตั้งใจ ไม่ใช่บั๊ก
+- รูปเมนู/QR/สลิปเก็บเป็นไฟล์จริงบน disk ของ backend แล้ว (ไม่ใช่ data URL ใน DB อีกต่อไป) แต่ยังไม่ได้ย้ายไป Railway Volume/object storage ถาวร — เสี่ยงข้อมูลหายถ้า deploy แบบ ephemeral filesystem
+- `src/geo.ts` (frontend) และ `backend/src/bookings/geo.util.ts` มีตรรกะโซนพื้นที่/ค่าขนส่งที่ต้องตรงกันเป๊ะ (ฝั่งไหนคำนวณราคาจริงคือ backend เสมอ ฝั่ง frontend ใช้แค่ preview) มี test คู่ (`geo.test.ts`/`geo.util.spec.ts`) ช่วยจับความเพี้ยนถ้าแก้ฝั่งเดียวแล้วลืมอีกฝั่ง
