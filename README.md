@@ -296,7 +296,24 @@ cd "Catering Booking Web Application"
 
 ## ข้อควรรู้
 
-- **รูปเมนูที่อัปโหลดและสลิปโอนเงิน** เก็บเป็นไฟล์บน disk ของ backend (โฟลเดอร์ `backend/uploads/`) ไม่ใช่ base64 ในฐานข้อมูลอีกต่อไป — ไฟล์เก่าถูกลบทิ้งอัตโนมัติทุกครั้งที่มีการเปลี่ยนรูปใหม่ กันไฟล์ orphan สะสม แต่**ยังไม่ได้แยกไปเก็บที่ object storage** (เช่น Cloudflare R2/S3) เพราะยังไม่ได้ deploy backend เป็น service จริง — ตอน deploy บน Railway ต้องแนบ **Railway Volume** ให้โฟลเดอร์ `uploads/` ไม่งั้นไฟล์จะหายทุกครั้งที่ redeploy
+- **รูปเมนูที่อัปโหลดและสลิปโอนเงิน** เก็บเป็นไฟล์บน disk ของ backend (โฟลเดอร์ `backend/uploads/`) ไม่ใช่ base64 ในฐานข้อมูลอีกต่อไป — ไฟล์เก่าถูกลบทิ้งอัตโนมัติทุกครั้งที่มีการเปลี่ยนรูปใหม่ กันไฟล์ orphan สะสม แต่**ยังไม่ได้แยกไปเก็บที่ object storage** (เช่น Cloudflare R2/S3) เพราะยังไม่ได้ deploy backend เป็น service จริง — ตอน deploy บน Railway ต้องแนบ **Railway Volume** ให้โฟลเดอร์ `uploads/` ไม่งั้นไฟล์จะหายทุกครั้งที่ redeploy (checklist ด้านล่าง)
+
+### Checklist: ตั้งค่า Railway Volume ก่อน deploy backend ครั้งแรก
+
+Railway container filesystem เป็น ephemeral โดย default — ถ้าข้ามขั้นตอนนี้ รูปเมนู/QR พร้อมเพย์/สลิปโอนเงินที่อัปโหลดผ่านแอปจะ**หายทุกครั้งที่ redeploy หรือ restart service** (แต่ path ที่บันทึกไว้ใน DB จะยังอยู่ กลายเป็นลิงก์ที่เสีย)
+
+1. เปิดโปรเจกต์ backend บน Railway Dashboard → เลือก service backend
+2. ไปแท็บ **Settings → Volumes** → กด **New Volume**
+3. ตั้ง **Mount path** เป็น path ที่ backend จะเขียนไฟล์ลง เช่น `/data/uploads` (ห้ามชี้ไปที่ path ที่โค้ด build ทับ เช่น `/app`)
+4. ไปแท็บ **Variables** ของ service เดียวกัน เพิ่ม env var:
+   ```
+   UPLOADS_DIR=/data/uploads
+   ```
+   (โค้ดอ่านค่านี้อยู่แล้วที่ `backend/src/uploads/uploads.constants.ts` — ไม่ต้องแก้โค้ดเพิ่ม)
+5. Deploy/redeploy service แล้วเช็คว่า container เขียนไฟล์ลง mount path ได้จริง (ลองอัปโหลดรูปเมนู 1 รูปจากหน้า Owner → Menus)
+6. ทดสอบว่าไฟล์อยู่รอดจริง: สั่ง **redeploy** อีกครั้ง (หรือ restart service) แล้วเช็คว่ารูปที่อัปโหลดไว้ยังเปิดดูได้ ไม่ broken
+7. (แนะนำ) ตั้ง backup/snapshot ของ Volume ตามรอบ ถ้า Railway plan รองรับ — Volume ไม่ได้กันข้อมูลหายจาก human error (เช่นลบ service ผิด) เหมือน DB backup
+8. อัปเดตค่า `UPLOADS_DIR` เดียวกันนี้ในทุก environment ที่แยกกัน (เช่นถ้ามี staging environment แยกจาก production บน Railway ต้องตั้ง Volume คนละลูกคนละ mount path)
 - **การชำระเงินมัดจำ** ยังใช้วิธีลูกค้าแนบสลิปให้ร้านตรวจสอบเอง ไม่ใช่ payment gateway จริง (พร้อมเพย์/บัตรเครดิต) — เป็นการตัดสินใจตั้งใจ ไม่ใช่ข้อจำกัด
 - **ระบบยังรันอยู่บนเครื่อง dev เท่านั้น** ยังไม่ได้ deploy ขึ้น production จริง (แผนคือ Vercel สำหรับ frontend และ Railway สำหรับ backend/ฐานข้อมูล) — DB บน Railway เป็นฐานข้อมูลจริงที่ backend ฝั่ง dev ต่อตรงอยู่แล้ว
 - **การพิมพ์เอกสาร** ใช้ระบบพิมพ์ของเบราว์เซอร์ เลือก "Save as PDF" เพื่อบันทึกเป็นไฟล์ได้
