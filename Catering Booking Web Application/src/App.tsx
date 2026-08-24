@@ -41,11 +41,10 @@ import Menus from './screens/owner/Menus'
 import Documents from './screens/owner/Documents'
 import Reports from './screens/owner/Reports'
 import Settings from './screens/owner/Settings'
-import UserRoles from './screens/owner/UserRoles'
 
 const OWNER_SCREENS: Screen[] = [
   'owner-dashboard', 'owner-orders', 'owner-calendar', 'owner-packages', 'owner-menus', 'owner-documents',
-  'owner-reports', 'owner-users', 'owner-settings',
+  'owner-reports', 'owner-settings',
 ]
 
 /** เวลาที่ลูกค้าเปิดหน้า "การแจ้งเตือน" ล่าสุด — ใช้ตัดสินว่ารายการไหน "ยังไม่อ่าน" (เหมือน owner-notif-seen-at ฝั่งเจ้าของร้าน) */
@@ -211,23 +210,6 @@ export default function App() {
     return api.bookingsPage(token, page, pageSize, search, status)
   }
 
-  /** owner ค้นหาผู้ใช้ที่เคย login แล้วด้วยอีเมล — ใช้ในหน้า "สิทธิ์การเข้าถึง" เพื่อเลื่อน/ถอดสิทธิ์ owner
-   *  ไม่ห่อด้วย runAction เพราะ UserRoles.tsx จัดการ error เองแบบ inline ใกล้ช่องค้นหา */
-  const handleSearchUsers = async (email: string) => {
-    const token = await withToken()
-    return api.searchUsersByEmail(token, email)
-  }
-
-  const handleSetUserRole = async (userId: string, role: 'OWNER' | 'CUSTOMER') => {
-    const token = await withToken()
-    await api.setUserRole(token, userId, role)
-  }
-
-  const handleListOwners = async () => {
-    const token = await withToken()
-    return api.listOwners(token)
-  }
-
   /** อัปเดตชื่อร้านบนแท็บเบราว์เซอร์ + จำไว้ใน localStorage ให้หน้า Login ใช้ได้ก่อน login */
   useEffect(() => {
     document.title = settings.shopInfo.name
@@ -323,9 +305,7 @@ export default function App() {
   }
 
   /**
-   * role จริงต้องมาจาก backendUser.role (DB) ไม่ใช่ claim จาก Auth0 ตรงๆ — เพราะ owner จัดการ role ของคนอื่นเองได้
-   * ผ่านหน้า "สิทธิ์การเข้าถึง" แล้ว (เช่น เลื่อนคนที่ login ด้วย Google ให้เป็น owner) ถ้ายังอ่านจาก claim อย่างเดียว
-   * คนที่เพิ่งถูกเลื่อนจะยังเข้าหน้า owner ไม่ได้ทั้งที่ backend ยอมให้เรียก API แบบ owner แล้ว
+   * role จริงต้องมาจาก backendUser.role (DB) ไม่ใช่ claim จาก Auth0 ตรงๆ — DB เป็นแหล่งความจริงของ role เสมอ
    * ใช้ claim (roleFromAuth0User) เป็นแค่ fallback ช่วงก่อน backendUser โหลดเสร็จเท่านั้น (เสี้ยววินาทีแรกหลัง login)
    */
   const role: AppRole = backendUser
@@ -578,14 +558,6 @@ export default function App() {
         )}
         {effectiveScreen === 'owner-reports' && (
           <Reports bookings={bookings} menus={menus} settings={settings} />
-        )}
-        {effectiveScreen === 'owner-users' && (
-          <UserRoles
-            onSearchUser={handleSearchUsers}
-            onSetRole={handleSetUserRole}
-            onListOwners={handleListOwners}
-            currentAuth0Sub={backendUser?.auth0Sub}
-          />
         )}
         {effectiveScreen === 'owner-settings' && (
           <Settings settings={settings} onUpdateSettings={handleUpdateSettings} onUploadImage={handleUploadImage} />

@@ -13,7 +13,6 @@ import {
   Menu,
   Package,
   Settings,
-  Shield,
   X,
 } from 'lucide-react'
 import { buildNotifications, formatRelativeTime } from '../notifications'
@@ -41,7 +40,6 @@ const sidebarItems = [
   { label: 'เมนูอาหาร', screen: 'owner-menus' as Screen, icon: Book },
   { label: 'เอกสาร', screen: 'owner-documents' as Screen, icon: FileText },
   { label: 'รายงาน', screen: 'owner-reports' as Screen, icon: FileBarChart },
-  { label: 'สิทธิ์การเข้าถึง', screen: 'owner-users' as Screen, icon: Shield },
   { label: 'ตั้งค่า', screen: 'owner-settings' as Screen, icon: Settings },
 ]
 

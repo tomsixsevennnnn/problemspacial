@@ -64,7 +64,7 @@ title: "Requirement Specification — ระบบจองแคทเธอร
   - `customer` → login ด้วย Google OAuth2 (`google-oauth2`)
   - `owner` → login ด้วย Username/Password (`Username-Password-Authentication`), ต้องสร้างบัญชีไว้ล่วงหน้าใน Auth0 Dashboard
 - Auth0 ไม่ส่ง connection name มาตรงๆ ใน token จึงต้องใช้ **Auth0 Action** (Post-Login) ฝัง custom claim `https://pipatphochana-catering.app/role` (`owner`/`customer`) ลงใน ID token และ Access token (ดู `docs/auth0-action.md`) — claim นี้ใช้เป็นค่า**เริ่มต้น**ตอนสร้าง `User` record ครั้งแรกเท่านั้น
-- หลังจากนั้น **`User.role` ใน DB คือความจริงหลัก** ไม่ถูก sync ทับจาก claim อีกในการ login ครั้งถัดๆ ไป — owner ที่มีอยู่แล้วสามารถเลื่อน/ถอดสิทธิ์ owner ให้บัญชีอื่น (ที่เคย login มาแล้วอย่างน้อย 1 ครั้ง) ได้เองผ่านหน้า "สิทธิ์การเข้าถึง" ในแอป โดยไม่ต้องเข้า Auth0 Dashboard (ดู `UsersController` หัวข้อ 4.5)
+- หลังจากนั้น **`User.role` ใน DB คือความจริงหลัก** ไม่ถูก sync ทับจาก claim อีกในการ login ครั้งถัดๆ ไป — การเปลี่ยน role ของ user ที่มีอยู่แล้วทำได้เฉพาะแก้ที่ฐานข้อมูลโดยตรงเท่านั้น (ไม่มีหน้าจัดการในแอปอีกต่อไป)
 - Frontend กำหนด role ที่ใช้ควบคุมการนำทางจาก `backendUser.role` (ผลลัพธ์ของ `GET /users/me`) เป็นหลัก ใช้ claim ผ่าน `roleFromAuth0User()` (`src/auth.ts`) เป็น fallback แค่ช่วงก่อนโหลดข้อมูล user จาก backend เสร็จ
 - Backend ตรวจสอบ JWT ด้วย `JwtStrategy` (RS256 ผ่าน JWKS ของ Auth0 tenant) แล้วเช็ค role จาก **DB** (query `User.role` โดย `auth0Sub`, cache ในหน่วยความจำ 5 วินาที) ใน `RolesGuard` + decorator `@Roles('owner' | 'customer')` — ไม่ใส่ decorator = เข้าถึงได้ทุก role ที่ login แล้ว; ถ้ายังไม่มี `User` record (login ครั้งแรกสุด) จะ fallback ไปใช้ค่าจาก JWT claim ชั่วคราว
 - ข้อมูลโปรไฟล์เพิ่มเติมที่ Auth0/Google ไม่มีให้ (เบอร์โทร, Line ID) ขอเพิ่มครั้งแรกหลัง login ผ่านหน้า **CompleteProfile** แล้วเก็บไว้ (frontend: `localStorage` ผ่าน `src/profileStore.ts`; backend: มี endpoint `PATCH /users/me` รองรับ)
@@ -102,10 +102,9 @@ title: "Requirement Specification — ระบบจองแคทเธอร
 - **แพ็กเกจ**: สร้าง/แก้ไข/ลบแพ็กเกจ (ราคาต่อโต๊ะ, จำนวนเมนูที่เลือกได้, features, badge, คอร์สอาหารแต่ละข้อพร้อมจำนวนที่เลือกได้และเมนูที่อยู่ในข้อนั้น)
 - **เมนูอาหาร**: สร้าง/แก้ไข/ลบ(soft delete)เมนูในคลัง, อัปโหลดรูปเมนูเป็นไฟล์จริงบน disk (ย่อขนาดก่อนอัปโหลด, ลบไฟล์เก่าอัตโนมัติเมื่อเปลี่ยน/ลบรูป), เปิด/ปิดการแสดงเมนู, ระบบเตือนก่อนลบถ้าเมนูถูกใช้อยู่ในแพ็กเกจ
 - **เอกสาร**: ออก/พิมพ์ใบเสนอราคาและใบจองของทุกใบจอง โดยใช้เทมเพลตเดียวกัน อ้างอิงค่าตั้งค่าร้าน (ชื่อร้าน, อัตรามัดจำ ฯลฯ)
-- **สิทธิ์การเข้าถึง**: ค้นหาผู้ใช้ (ที่เคย login เข้าระบบมาแล้วอย่างน้อย 1 ครั้ง) ด้วยอีเมล แล้วเลื่อน/ถอดสิทธิ์ owner ให้ได้เอง ไม่ต้องเข้า Auth0 Dashboard, ดูรายชื่อ owner ปัจจุบันทั้งหมด, ระบบกันไม่ให้ถอด owner คนสุดท้ายจนไม่เหลือ owner เลย
 - **ตั้งค่า**: แก้ไขข้อมูลร้าน (ชื่อไทย/อังกฤษ, ชื่อย่อ, ที่อยู่, เบอร์โทร, Line), อัตรามัดจำ, ค่าขนส่ง, จำนวนโต๊ะขั้นต่ำสำหรับพื้นที่นอกร้าน — ป้องกันแก้ทับกันด้วย optimistic concurrency (`Settings.version`) มีผลทันทีต่อการคำนวณราคาและเอกสารทั้งระบบ
 
-**หมายเหตุ:** หน้า "ลูกค้า" (รวมใบจองเป็นรายลูกค้าตามเบอร์โทร) ถูกถอดออกจากระบบแล้ว
+**หมายเหตุ:** หน้า "ลูกค้า" (รวมใบจองเป็นรายลูกค้าตามเบอร์โทร) และหน้า "สิทธิ์การเข้าถึง" (จัดการ role owner ในแอป) ถูกถอดออกจากระบบแล้ว — เปลี่ยน role ของ user ต้องแก้ที่ฐานข้อมูลโดยตรง
 
 **ทำไม่ได้ (ยังไม่มีในระบบ):** ไม่มีบทบาทที่ 3 (เช่น staff/พนักงาน), ไม่มีระบบสมาชิกลูกค้าแยกจาก booking, ไม่มี payment gateway (ยังตรวจสลิปโอนเงินด้วยมือ)
 
@@ -128,7 +127,6 @@ title: "Requirement Specification — ระบบจองแคทเธอร
 | `GET /bookings/page` (ค้นหา+แบ่งหน้า) | ✅ เห็นเฉพาะของตัวเอง | ✅ เห็นทั้งหมด | — |
 | `POST /uploads/menu-image`, `POST /uploads/promptpay-qr` | ❌ | ✅ | — |
 | `POST /uploads/payment-slip` | ✅ | ❌ | — |
-| `GET /users/search`, `GET /users/owners`, `PATCH /users/:id/role` | ❌ | ✅ | — |
 
 ควบคุมด้วย `JwtAuthGuard` (ต้องมี token ที่ valid) + `RolesGuard` (เช็ค role จาก DB, ดูหัวข้อ 2.3) ทุก controller ยกเว้น `GET /users/me`/`PATCH /users/me` ที่มีแค่ `JwtAuthGuard`; endpoint อัปโหลดไฟล์มี rate limit เพิ่มเติม (10 ครั้ง/นาที)
 
@@ -168,7 +166,6 @@ title: "Requirement Specification — ระบบจองแคทเธอร
 | Packages | `src/screens/owner/Packages.tsx` | CRUD แพ็กเกจอาหาร, จัดการคอร์ส/ข้อในแพ็กเกจ และเมนูที่เลือกได้ในแต่ละข้อ (กรองตามหมวดของข้อนั้น) |
 | Menus | `src/screens/owner/Menus.tsx` | CRUD เมนูอาหารในคลัง, อัปโหลด/ย่อรูปภาพ, เตือนก่อนลบถ้าถูกใช้ในแพ็กเกจอยู่ |
 | Documents | `src/screens/owner/Documents.tsx` | ออกใบเสนอราคา/ใบจองของทุกใบจอง, สั่งพิมพ์ |
-| UserRoles | `src/screens/owner/UserRoles.tsx` | ค้นหาผู้ใช้ด้วยอีเมล (live search), เลื่อน/ถอดสิทธิ์ owner, ดูรายชื่อ owner ทั้งหมด |
 | Settings | `src/screens/owner/Settings.tsx` | แก้ไขข้อมูลร้านและค่าคำนวณ (อัตรามัดจำ, ค่าขนส่ง, ขั้นต่ำโต๊ะพื้นที่นอกร้าน) |
 
 ### 4.4 Shared components / business logic modules
@@ -205,8 +202,7 @@ title: "Requirement Specification — ระบบจองแคทเธอร
 | Settings | `PATCH /settings` | owner | แก้ไขค่าตั้งค่าร้าน (optimistic concurrency ผ่าน `version`) |
 | Bookings | `GET /bookings/page` | customer/owner | ดึงแบบแบ่งหน้า+ค้นหา (ใช้กับ Orders.tsx ฝั่ง owner) |
 | Uploads | `POST /uploads/menu-image`, `/promptpay-qr`, `/payment-slip` | owner/owner/customer | อัปโหลดรูปเป็นไฟล์บน disk คืน path สั้น `/uploads/...` |
-| Users | `GET /users/search?email=`, `GET /users/owners`, `PATCH /users/:id/role` | owner | ค้นหา/ดูรายชื่อ/เลื่อน-ถอดสิทธิ์ owner |
-| Audit | (ภายใน, ไม่มี endpoint เปิดเขียนตรง) | — | `AuditService.log()` บันทึกการลบเมนู/แพ็กเกจ, แก้ไข booking, เปลี่ยน role — ไม่ throw แม้บันทึกไม่สำเร็จ (best-effort) |
+| Audit | (ภายใน, ไม่มี endpoint เปิดเขียนตรง) | — | `AuditService.log()` บันทึกการลบเมนู/แพ็กเกจ, แก้ไข booking — ไม่ throw แม้บันทึกไม่สำเร็จ (best-effort) |
 
 ---
 
@@ -258,7 +254,7 @@ title: "Requirement Specification — ระบบจองแคทเธอร
 
 ## 6. Data Model สรุป (Prisma schema, `backend/prisma/schema.prisma`)
 
-- **User** — `id, auth0Sub(unique), role(CUSTOMER|OWNER), name, surname, phone, lineId, email, avatar, createdAt` → มีหลาย `Booking` — `role` แก้ได้ผ่านหน้า "สิทธิ์การเข้าถึง" หลังสร้างครั้งแรก (ดูหัวข้อ 2.3)
+- **User** — `id, auth0Sub(unique), role(CUSTOMER|OWNER), name, surname, phone, lineId, email, avatar, createdAt` → มีหลาย `Booking` — `role` แก้ได้เฉพาะที่ฐานข้อมูลโดยตรงหลังสร้างครั้งแรก (ดูหัวข้อ 2.3)
 - **MenuItem** — `id, name, category, description, image?, costPrice?, active, deletedAt?` → เชื่อมกับหลาย `PackageCourse` (many-to-many ผ่าน `CourseItems`) — ลบแบบ soft delete (`deletedAt`), ไม่มี `extraPrice` แล้ว
 - **Package** — `id, name, pricePerTable, menuLimit, description, features[], badge?, deletedAt?` → มีหลาย `PackageCourse`, มีหลาย `Booking` (ผ่าน `packageId`) — ลบแบบ soft delete
 - **PackageCourse** — `id, packageId, no, title, category, choose (0=รวมมาให้แล้ว/>0=เลือกได้กี่อย่าง), items[]`

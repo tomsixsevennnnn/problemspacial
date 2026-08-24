@@ -231,17 +231,6 @@ export const api = {
   updateProfile: (token: string, patch: { name?: string; surname?: string; phone?: string; lineId?: string }) =>
     request<BackendUser>(token, '/users/me', { method: 'PATCH', body: JSON.stringify(patch) }),
 
-  /** owner ค้นหาผู้ใช้ที่เคย login แล้วด้วยอีเมล เพื่อเลื่อน/ถอดสิทธิ์ owner — คืนหลาย row ได้ถ้าอีเมลเดียวกัน login คนละวิธี */
-  searchUsersByEmail: (token: string, email: string) =>
-    request<BackendUser[]>(token, `/users/search?email=${encodeURIComponent(email)}`),
-
-  /** รายชื่อ owner ทั้งหมดตอนนี้ — โชว์ในหน้า "สิทธิ์การเข้าถึง" */
-  listOwners: (token: string) => request<BackendUser[]>(token, '/users/owners'),
-
-  /** owner เลื่อน/ถอดสิทธิ์ owner ให้ user คนอื่น */
-  setUserRole: (token: string, userId: string, role: 'OWNER' | 'CUSTOMER') =>
-    request<BackendUser>(token, `/users/${userId}/role`, { method: 'PATCH', body: JSON.stringify({ role }) }),
-
   /** อัปโหลดรูป (data URL จาก pickImageAsDataUrl) ไปเก็บเป็นไฟล์บน backend — คืน URL สั้นๆ เอาไปเก็บในฟิลด์รูปแทน data URL เต็ม */
   uploadImage: async (token: string, kind: UploadKind, dataUrl: string): Promise<string> =>
     (await request<{ url: string }>(token, `/uploads/${kind}`, { method: 'POST', body: JSON.stringify({ dataUrl }) }))

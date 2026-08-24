@@ -17,7 +17,6 @@ export type Screen =
   | 'owner-documents'
   | 'owner-reports'
   | 'owner-settings'
-  | 'owner-users'
 
 export interface Category {
   id: string

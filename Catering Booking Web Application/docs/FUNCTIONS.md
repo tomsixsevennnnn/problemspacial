@@ -46,7 +46,7 @@ Props: `name` (แสดงทักทาย), `onComplete: (profile: StoredPro
 
 | ฟังก์ชัน/ค่า | รายละเอียด |
 |---|---|
-| `role` | ถ้า `backendUser` (ผลลัพธ์ `GET /users/me`) โหลดมาแล้ว → ใช้ `backendUser.role === 'OWNER' ? 'owner' : 'customer'` เสมอ (DB คือความจริงหลัก); ถ้ายังไม่โหลดเสร็จ → fallback ชั่วคราวไปที่ `roleFromAuth0User(auth0User)` (อ่าน custom claim) — จำเป็นเพราะ role แก้ไขได้ภายหลังผ่านฟีเจอร์เลื่อน/ถอดสิทธิ์ owner (`UserRoles.tsx`) ซึ่ง claim เดิมจะไม่อัปเดตตาม |
+| `role` | ถ้า `backendUser` (ผลลัพธ์ `GET /users/me`) โหลดมาแล้ว → ใช้ `backendUser.role === 'OWNER' ? 'owner' : 'customer'` เสมอ (DB คือความจริงหลัก); ถ้ายังไม่โหลดเสร็จ → fallback ชั่วคราวไปที่ `roleFromAuth0User(auth0User)` (อ่าน custom claim) |
 | `storedProfile = getStoredProfile(auth0User.sub)` | ดึงโปรไฟล์เสริม (เบอร์โทร/Line) จาก localStorage |
 | `needsProfile` | `true` เมื่อ login แล้ว, เป็น customer, และยังไม่มี `storedProfile` → บังคับไปหน้า `CompleteProfile` ก่อน |
 | `effectiveScreen` | ถ้า `screen === 'login'` และ login สำเร็จแล้วและไม่ต้องกรอกโปรไฟล์ → บังคับเป็น `'owner-dashboard'` (ถ้า role เป็น owner) หรือ `'home'` (ถ้าเป็น customer) |
@@ -224,17 +224,6 @@ Props: `name` (แสดงทักทาย), `onComplete: (profile: StoredPro
 | ปุ่มพิมพ์ (ในลิสต์) | ตั้ง `previewBooking` แล้ว `setTimeout(() => window.print(), 100)` — หน่วงเล็กน้อยให้ preview render ก่อนสั่งพิมพ์ |
 | ปุ่มพิมพ์ (ใน preview) | เรียก `window.print()` ทันที |
 
-### 3.7 `UserRoles.tsx` (แทนที่ `Customers.tsx` ที่ถูกลบออกจากระบบ)
-
-| ฟังก์ชัน | Input → Output | ตรรกะ |
-|---|---|---|
-| `loadOwners()` | – | เรียก `onListOwners()` (`GET /users/owners`) ครั้งแรกตอน mount และหลังทำรายการ promote/demote ทุกครั้ง เพื่อ refresh รายชื่อ owner ด้านบนให้ตรงสถานะล่าสุด |
-| debounce ช่องค้นหา (300ms) → auto-search | `email` state | ยิง `onSearchUser(debouncedEmail)` (`GET /users/search?email=`) อัตโนมัติเมื่อพิมพ์ตั้งแต่ 3 ตัวอักษรขึ้นไป (ค้นแบบ `contains`, ไม่สนตัวพิมพ์เล็กใหญ่, พิมพ์บางส่วนก็เจอ) |
-| `handleSetRole(user, role)` | – | เรียก `onSetRole(user.id, role)` (`PATCH /users/:id/role`); อัปเดต `results` ในหน้าให้ตรงทันที แล้วเรียก `loadOwners()` ซ้ำเพื่อ sync รายชื่อ owner; แสดง error จาก backend ตรงๆ ถ้าเจอ (เช่น "ต้องมี owner อย่างน้อย 1 คนเสมอ") |
-| ปุ่มถอดสิทธิ์ของแถวตัวเอง | – | ถูก `disabled` เสมอเมื่อ `user.auth0Sub === currentAuth0Sub` (เทียบกับ owner ที่ login อยู่ตอนนี้) — กันเผลอถอดสิทธิ์ตัวเองที่ UI ชั้นหนึ่งก่อนถึง backend |
-
-ผู้ใช้ที่ค้นหาเจอต้องเคย login เข้าระบบมาแล้วอย่างน้อย 1 ครั้ง (มี `User` record อยู่แล้ว) — ยังไม่รองรับ pre-authorize อีเมลที่ไม่เคย login
-
 ### 3.8 `Settings.tsx`
 
 | ฟังก์ชัน | Input → Output | ตรรกะ |
@@ -380,11 +369,8 @@ Presentational: ถ้า `item.image` มีค่า → แสดงรูป
 
 | Endpoint | Guard/Role | ฟังก์ชัน service | ตรรกะ |
 |---|---|---|---|
-| `GET /users/me` | login แล้วเท่านั้น | `UsersService.findOrCreate(profile)` (เรียก `syncProfile` ภายใน) | login ครั้งแรก: สร้าง `User` ใหม่ด้วยข้อมูลจาก JWT (`given_name`/`name`, `family_name`, `email`, `picture`) และตั้ง `role` เริ่มต้นจาก JWT claim; login ครั้งถัดไป: อัปเดตแค่ชื่อ/รูปที่เปลี่ยนจาก Auth0 **ไม่แตะ `role` อีก** (กันไม่ให้ทับ role ที่ owner ตั้งไว้ผ่าน FR-O13) |
+| `GET /users/me` | login แล้วเท่านั้น | `UsersService.findOrCreate(profile)` (เรียก `syncProfile` ภายใน) | login ครั้งแรก: สร้าง `User` ใหม่ด้วยข้อมูลจาก JWT (`given_name`/`name`, `family_name`, `email`, `picture`) และตั้ง `role` เริ่มต้นจาก JWT claim; login ครั้งถัดไป: อัปเดตแค่ชื่อ/รูปที่เปลี่ยนจาก Auth0 **ไม่แตะ `role` อีก** (role หลังสร้างแล้วแก้ได้เฉพาะที่ฐานข้อมูลโดยตรง) |
 | `PATCH /users/me` | login แล้วเท่านั้น | `UsersService.updateProfile(auth0Sub, dto)` | อัปเดต field ตาม `UpdateProfileDto` (เบอร์โทร/Line ID ที่ Auth0 ไม่มี) โดย `where: { auth0Sub }` |
-| `GET /users/search?email=` | `@Roles('owner')` | `UsersService.findByEmail(email)` | `contains` + `mode: 'insensitive'`, จำกัด 20 ผลลัพธ์ — พิมพ์อีเมลบางส่วนก็ค้นเจอ |
-| `GET /users/owners` | `@Roles('owner')` | `UsersService.findOwners()` | คืนทุก `User` ที่ `role === OWNER` เรียงตาม `createdAt` |
-| `PATCH /users/:id/role` | `@Roles('owner')` | `UsersService.setRole(id, role)` | เช็คว่า target user มีอยู่จริงก่อน (404 ถ้าไม่พบ); ถ้าจะถอดสิทธิ์ owner (`role → CUSTOMER`) ต้องเช็คว่ามี owner คนอื่นเหลืออยู่อย่างน้อย 1 คน (`count({role: OWNER, id: {not: id}})`) มิฉะนั้น throw `400 BadRequestException`; สำเร็จแล้วบันทึก `AuditLog` (`user.role.promote`/`user.role.demote`) |
 
 ### 6.2 `BookingsController` (`/bookings`)
 
