@@ -16,11 +16,14 @@ interface HomeProps {
   shopName: string
 }
 
+
+
 const STEPS = [
   { icon: '📅', title: 'เลือกวันและเวลา', desc: 'เลือกวันที่และช่วงเวลาที่ต้องการจัดงาน' },
   { icon: '🪑', title: 'เลือกจำนวนโต๊ะ', desc: 'กำหนดจำนวนโต๊ะและผู้เข้าร่วมงาน' },
   { icon: '📍', title: 'ระบุสถานที่', desc: 'ปักหมุดสถานที่จัดงานบนแผนที่' },
   { icon: '🍽️', title: 'เลือกแพ็กเกจ', desc: 'เลือกแพ็กเกจอาหารที่เหมาะสม' },
+  { icon: '📋', title: 'เลือกเมนูอาหาร', desc: 'เลือกเมนูตามแต่ละหมวดของแพ็กเกจ' },
   { icon: '✅', title: 'ยืนยันการจอง', desc: 'ตรวจสอบและยืนยันการจองทั้งหมด' },
 ]
 
@@ -75,7 +78,15 @@ export default function Home({ navigate, user, notifCount, shopName }: HomeProps
                     เริ่มจองเลย
                     <ArrowRight size={20} />
                   </button>
-                  <button className="flex items-center gap-2 bg-white/10 hover:bg-white/20 text-white px-8 py-4 rounded-2xl font-semibold backdrop-blur-sm transition-all border border-white/20">
+                  <button
+                    onClick={() =>
+                      document.getElementById('Trackrecord')?.scrollIntoView({
+                        behavior: 'smooth',
+                        block: 'start',
+                      })
+                    }
+                    className="flex items-center gap-2 bg-white/10 hover:bg-white/20 text-white px-8 py-4 rounded-2xl font-semibold backdrop-blur-sm transition-all border border-white/20"
+                  >
                     ดูตัวอย่างงาน
                   </button>
                 </div>
@@ -112,7 +123,7 @@ export default function Home({ navigate, user, notifCount, shopName }: HomeProps
             <h2 className="text-3xl font-bold text-gray-900">ขั้นตอนการจอง</h2>
           </div>
 
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
             {STEPS.map((step, i) => (
               <div key={i} className="relative">
                 <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 text-center hover:shadow-md hover:border-orange-100 transition-all group">
@@ -135,9 +146,11 @@ export default function Home({ navigate, user, notifCount, shopName }: HomeProps
 
         {/* Gallery */}
         <section>
-          <div className="text-center mb-12">
-            <p className="text-orange-500 font-semibold text-sm mb-2">ผลงานของเรา</p>
-            <h2 className="text-3xl font-bold text-gray-900">ตัวอย่างงานที่ผ่านมา</h2>
+          <div id="Trackrecord" className="Trackrecord">
+            <div className="text-center mb-12">
+              <p className="text-orange-500 font-semibold text-sm mb-2">ผลงานของเรา</p>
+              <h2 className="text-3xl font-bold text-gray-900">ตัวอย่างงานที่ผ่านมา</h2>
+            </div>
           </div>
           <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
             {GALLERY.map((url, i) => (

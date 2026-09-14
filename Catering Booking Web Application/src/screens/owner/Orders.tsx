@@ -519,9 +519,10 @@ export default function Orders({ bookings, menus, settings, onUpdateBooking, onF
               <div className="max-w-2xl mx-auto space-y-2">
               <p className="text-xs font-semibold text-gray-400 mb-3">อัปเดตสถานะ</p>
               <div className="grid grid-cols-3 gap-2">
-                {(['pending', 'confirmed', 'completed'] as const).map(s => {
+                {(['pending', 'confirmed', 'completed','cancelled'] as const).map(s => {
                   const sc = STATUS_CONFIG[s]
                   const isActive = selected.status === s
+                  
                   return (
                     <button
                       key={s}

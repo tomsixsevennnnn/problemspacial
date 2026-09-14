@@ -241,7 +241,7 @@ export default function Cart({
               </div>
 
               <div className="bg-orange-50 rounded-xl p-3 mb-5 text-xs text-orange-700">
-                💳 ชำระเงินเมื่อทีมงานยืนยันการจอง
+                💳 ชำระเงินที่หน้าประวัติการจอง หลังจาก กด <h1 className="font-bold">'ยืนยันการจอง'</h1>
               </div>
 
               <button
