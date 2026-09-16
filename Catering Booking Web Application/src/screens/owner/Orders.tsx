@@ -50,11 +50,13 @@ export default function Orders({ bookings, menus, settings, onUpdateBooking, onF
   const [noteDraft, setNoteDraft] = useState('')
   const [slipZoom, setSlipZoom] = useState<string | null>(null)
 
-  // หาใน pageData ก่อน (ข้อมูลสดจากตารางที่ paginate แยกต่างหาก) — bookings ตัวเต็มโหลดครั้งเดียวตอนเปิดแอป
-  // ไม่ได้ refetch จนกว่าจะ reload หน้า ถ้าอ้างจาก bookings ตรง ๆ รายการที่เพิ่งจองเข้ามาใหม่จะกดเปิดไม่ได้
-  // (หาไม่เจอใน bookings) จนกว่าจะ refresh ทั้งหน้า — fallback ไป bookings ไว้เผื่อกรณีหน้า/ค้นหาเปลี่ยนไปแล้ว
+  // หาใน bookings (ชุดเต็ม) ก่อนเสมอ — เฉพาะ endpoint นี้เท่านั้นที่ join .customer.* (ชื่อ/นามสกุล/อีเมลจริงจาก
+  // User) มาด้วย ส่วน pageData (จากตาราง paginate) ไม่มี .customer เลยโดยตั้งใจ (ดูคอมเมนต์ที่ backend
+  // findPageForOwner) มีแค่ customerName/phone ที่ snapshot ไว้ในแถวเอง ถ้าหาใน pageData ก่อนชื่อ/นามสกุล/อีเมล
+  // จะหายไปทุกแถว — fallback ไป pageData เฉพาะตอนที่เป็นรายการเพิ่งจองใหม่ยังไม่ทันเข้า bookings (poll ทุก 15s
+  // ที่ App.tsx จะดึงมาให้เองในไม่ช้า อย่างมากก็รอแค่ช่วงสั้นๆ ไม่ใช่ต้อง refresh ทั้งหน้าเหมือนเดิม)
   const selected = selectedId
-    ? (pageData?.items.find(b => b.id === selectedId) ?? bookings.find(b => b.id === selectedId) ?? null)
+    ? (bookings.find(b => b.id === selectedId) ?? pageData?.items.find(b => b.id === selectedId) ?? null)
     : null
 
   // debounce ช่องค้นหา 300ms กันยิง request รัวๆ ทุกตัวอักษรที่พิมพ์
