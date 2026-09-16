@@ -12,20 +12,23 @@ import {
   Percent,
   QrCode,
   Save,
+  Search,
   Trash2,
   Truck,
   Users,
   Wallet,
+  X,
 } from 'lucide-react'
 import type { AppSettings } from '../../types'
 import { orderedCategories } from '../../data'
 import LocationMap from '../../components/LocationMap'
 import { pickImageAsDataUrl } from '../../imageUpload'
 import { resolveAssetUrl, type UploadKind } from '../../api'
+import { searchPlaces, searchPresets, type GeoResult } from '../../geo'
 
 interface SettingsProps {
   settings: AppSettings
-  onUpdateSettings: (patch: Partial<AppSettings>) => void
+  onUpdateSettings: (patch: Partial<AppSettings>) => Promise<void>
   onUploadImage: (kind: UploadKind, dataUrl: string) => Promise<string>
 }
 
@@ -53,11 +56,44 @@ const WAGE_FIELDS: { key: 'wageChef' | 'wageAssistant' | 'wageServerPerTable' | 
 export default function Settings({ settings, onUpdateSettings, onUploadImage }: SettingsProps) {
   const [form, setForm] = useState<AppSettings>(settings)
   const [savedAt, setSavedAt] = useState<number | null>(null)
+  const [saving, setSaving] = useState(false)
   const [locating, setLocating] = useState(false)
   const [locateError, setLocateError] = useState<string | null>(null)
   const [qrUploading, setQrUploading] = useState(false)
   const [qrError, setQrError] = useState<string | null>(null)
   const qrInputRef = useRef<HTMLInputElement>(null)
+
+  const [mapFocusKey, setMapFocusKey] = useState(0)
+  const [placeSearch, setPlaceSearch] = useState('')
+  const [placeResults, setPlaceResults] = useState<GeoResult[]>([])
+  const [showPlaceResults, setShowPlaceResults] = useState(false)
+  const [placeSearching, setPlaceSearching] = useState(false)
+
+  /* ค้นหาสถานที่แบบ debounce — ถ้าเรียกออนไลน์ไม่ได้ จะสำรองด้วยสถานที่ยอดนิยม */
+  useEffect(() => {
+    const q = placeSearch.trim()
+    if (q.length < 2) {
+      setPlaceResults([])
+      setPlaceSearching(false)
+      return
+    }
+    const ctrl = new AbortController()
+    const timer = setTimeout(() => {
+      setPlaceSearching(true)
+      searchPlaces(q, ctrl.signal)
+        .then(found => setPlaceResults(found.length > 0 ? found : searchPresets(q)))
+        .catch((err: Error) => {
+          if (err.name === 'AbortError') return
+          setPlaceResults(searchPresets(q))
+        })
+        .finally(() => setPlaceSearching(false))
+    }, 600)
+
+    return () => {
+      clearTimeout(timer)
+      ctrl.abort()
+    }
+  }, [placeSearch])
 
   // settings prop เปลี่ยนได้เองจาก polling (คนอื่นแก้ที่เครื่องอื่น) — sync form ตามให้ถ้ายังไม่ได้แก้อะไรค้างไว้
   // (เทียบกับค่า settings "ก่อนหน้า" ไม่ใช่ค่าล่าสุด กัน false positive ตอนกำลังจะเปลี่ยนพอดี)
@@ -120,6 +156,14 @@ export default function Settings({ settings, onUpdateSettings, onUploadImage }: 
     setSavedAt(null)
   }
 
+  /** เลือกสถานที่จากผลค้นหา — ปักหมุดร้านที่ตำแหน่งนั้นแล้วบินแผนที่ไปหา */
+  const selectPlaceResult = (r: GeoResult) => {
+    setShopLocation(r.lat, r.lng)
+    setPlaceSearch(r.name)
+    setShowPlaceResults(false)
+    setMapFocusKey(k => k + 1)
+  }
+
   /** ใช้ตำแหน่งปัจจุบันจาก GPS เป็นตำแหน่งร้าน — สะดวกเวลาตั้งค่าจากหน้าร้านจริง */
   const handleLocateShop = () => {
     if (!navigator.geolocation) {
@@ -132,6 +176,7 @@ export default function Settings({ settings, onUpdateSettings, onUploadImage }: 
       p => {
         setLocating(false)
         setShopLocation(p.coords.latitude, p.coords.longitude)
+        setMapFocusKey(k => k + 1)
       },
       err => {
         setLocating(false)
@@ -145,9 +190,15 @@ export default function Settings({ settings, onUpdateSettings, onUploadImage }: 
     )
   }
 
-  const handleSave = () => {
-    onUpdateSettings(form)
-    setSavedAt(Date.now())
+  const handleSave = async () => {
+    if (saving) return
+    setSaving(true)
+    try {
+      await onUpdateSettings(form)
+      setSavedAt(Date.now())
+    } finally {
+      setSaving(false)
+    }
   }
 
   /** สลับลำดับประเภทอาหารกับตัวก่อนหน้า/ถัดไป */
@@ -164,7 +215,7 @@ export default function Settings({ settings, onUpdateSettings, onUploadImage }: 
   }
 
   return (
-    <div className="max-w-2xl space-y-5 pb-24">
+    <div className="max-w-2xl space-y-5 pb-24" onClick={() => showPlaceResults && setShowPlaceResults(false)}>
       {/* ข้อมูลร้าน */}
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
         <div className="flex items-center gap-2 mb-5">
@@ -360,10 +411,60 @@ export default function Settings({ settings, onUpdateSettings, onUploadImage }: 
               ใช้ตำแหน่งปัจจุบัน
             </button>
           </div>
-          <p className="text-xs text-gray-400 mb-2">แตะบนแผนที่หรือลากหมุดเพื่อปรับตำแหน่งร้าน</p>
+          <p className="text-xs text-gray-400 mb-2">ค้นหาสถานที่ แตะบนแผนที่ หรือลากหมุดเพื่อปรับตำแหน่งร้าน</p>
+
+          <div className="relative mb-2" onClick={e => e.stopPropagation()}>
+            <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
+            <input
+              type="text"
+              placeholder="ค้นหาชื่อสถานที่หรือที่อยู่..."
+              value={placeSearch}
+              onChange={e => {
+                setPlaceSearch(e.target.value)
+                setShowPlaceResults(true)
+              }}
+              onFocus={() => setShowPlaceResults(true)}
+              className="w-full pl-9 pr-9 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 bg-gray-50"
+            />
+            {placeSearching && (
+              <Loader2 size={15} className="absolute right-3 top-1/2 -translate-y-1/2 text-orange-400 animate-spin" />
+            )}
+            {!placeSearching && placeSearch && (
+              <button
+                type="button"
+                onClick={() => {
+                  setPlaceSearch('')
+                  setPlaceResults([])
+                }}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full hover:bg-gray-200 flex items-center justify-center text-gray-400"
+              >
+                <X size={13} />
+              </button>
+            )}
+
+            {showPlaceResults && placeResults.length > 0 && (
+              <div className="absolute left-0 right-0 top-full mt-2 bg-white rounded-2xl border border-gray-200 shadow-xl overflow-hidden max-h-64 overflow-y-auto z-30">
+                {placeResults.map((r, i) => (
+                  <button
+                    key={`${r.lat}-${r.lng}-${i}`}
+                    type="button"
+                    onClick={() => selectPlaceResult(r)}
+                    className="w-full flex items-start gap-3 px-4 py-3 hover:bg-orange-50 text-left border-b border-gray-50 last:border-0 transition-colors"
+                  >
+                    <MapPin size={14} className="text-orange-500 mt-0.5 flex-shrink-0" />
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-gray-800 truncate">{r.name}</p>
+                      <p className="text-xs text-gray-400 line-clamp-2">{r.address}</p>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
 
           <LocationMap
             position={form.shopLocation}
+            focusKey={mapFocusKey}
             onPinChange={setShopLocation}
             onLocate={handleLocateShop}
             locating={locating}
@@ -481,11 +582,11 @@ export default function Settings({ settings, onUpdateSettings, onUploadImage }: 
         )}
         <button
           onClick={handleSave}
-          disabled={!dirty}
+          disabled={!dirty || saving}
           className="flex items-center justify-center gap-2 bg-orange-500 hover:bg-orange-600 disabled:bg-gray-300 disabled:text-gray-500 text-white rounded-full px-6 py-3.5 text-sm font-semibold shadow-lg shadow-orange-500/30 transition-colors"
         >
-          <Save size={16} />
-          บันทึกการตั้งค่า
+          {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+          {saving ? 'กำลังบันทึก...' : 'บันทึกการตั้งค่า'}
         </button>
       </div>
     </div>

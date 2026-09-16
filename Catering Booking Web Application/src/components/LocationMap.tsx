@@ -1,6 +1,6 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import L from 'leaflet'
-import { Loader2, Minus, Navigation, Plus } from 'lucide-react'
+import { Layers, Loader2, Minus, Navigation, Plus } from 'lucide-react'
 import 'leaflet/dist/leaflet.css'
 
 interface LocationMapProps {
@@ -13,6 +13,27 @@ interface LocationMapProps {
   /** false = แผนที่แสดงอย่างเดียว ปักหมุด/ลากไม่ได้ (ใช้ในหน้าเจ้าของร้าน) */
   interactive?: boolean
   className?: string
+}
+
+type LayerKind = 'street' | 'satellite'
+
+const LAYER_OPTIONS: { key: LayerKind; label: string }[] = [
+  { key: 'street', label: 'ถนน' },
+  { key: 'satellite', label: 'ภาพดาวเทียม' },
+]
+
+/** แหล่ง tile ของแต่ละรูปแบบแผนที่ — ทุกแหล่งใช้ได้ฟรีโดยไม่ต้องมี API key */
+const LAYER_SOURCES: Record<LayerKind, { url: string; attribution: string; maxZoom: number }> = {
+  street: {
+    url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+    attribution: '&copy; OpenStreetMap',
+    maxZoom: 19,
+  },
+  satellite: {
+    url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+    attribution: '&copy; Esri, Maxar, Earthstar Geographics',
+    maxZoom: 19,
+  },
 }
 
 /** หมุดสีส้มแบบ HTML — เลี่ยงปัญหารูป marker ของ Leaflet ที่ bundler หาไม่เจอ */
@@ -46,6 +67,9 @@ export default function LocationMap({
   const containerRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<L.Map | null>(null)
   const markerRef = useRef<L.Marker | null>(null)
+  const tileLayerRef = useRef<L.TileLayer | null>(null)
+  const [layer, setLayer] = useState<LayerKind>('street')
+  const [layerMenuOpen, setLayerMenuOpen] = useState(false)
   // เก็บ callback ล่าสุดไว้ใน ref เพื่อไม่ต้องสร้างแผนที่ใหม่ทุกครั้งที่ parent re-render
   const onPinChangeRef = useRef(onPinChange)
   onPinChangeRef.current = onPinChange
@@ -63,9 +87,10 @@ export default function LocationMap({
       keyboard: interactive,
     }).setView([position.lat, position.lng], 16)
 
-    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 19,
-      attribution: '&copy; OpenStreetMap',
+    const initial = LAYER_SOURCES.street
+    tileLayerRef.current = L.tileLayer(initial.url, {
+      maxZoom: initial.maxZoom,
+      attribution: initial.attribution,
     }).addTo(map)
 
     const marker = L.marker([position.lat, position.lng], {
@@ -109,6 +134,18 @@ export default function LocationMap({
     markerRef.current?.setLatLng([position.lat, position.lng])
   }, [position.lat, position.lng])
 
+  // สลับรูปแบบแผนที่ (ถนน / ดาวเทียม / ภูมิประเทศ) — ถอด tile layer เก่าแล้วใส่อันใหม่แทน
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map) return
+    const source = LAYER_SOURCES[layer]
+    if (tileLayerRef.current) map.removeLayer(tileLayerRef.current)
+    tileLayerRef.current = L.tileLayer(source.url, {
+      maxZoom: source.maxZoom,
+      attribution: source.attribution,
+    }).addTo(map)
+  }, [layer])
+
   // บินไปยังตำแหน่งใหม่เมื่อ focusKey เปลี่ยน (ค้นหา / GPS / เลือกสถานที่ยอดนิยม)
   useEffect(() => {
     const map = mapRef.current
@@ -125,6 +162,37 @@ export default function LocationMap({
 
       {interactive && (
         <>
+          <div className="absolute bottom-3 right-3 z-[1000]">
+            {layerMenuOpen && (
+              <div className="absolute bottom-11 right-0 bg-white rounded-xl shadow-xl border border-gray-100 overflow-hidden w-36">
+                {LAYER_OPTIONS.map(opt => (
+                  <button
+                    key={opt.key}
+                    onClick={() => {
+                      setLayer(opt.key)
+                      setLayerMenuOpen(false)
+                    }}
+                    className={`w-full text-left px-3.5 py-2.5 text-xs font-medium transition-colors ${
+                      layer === opt.key ? 'bg-orange-50 text-orange-600' : 'text-gray-700 hover:bg-gray-50'
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            <button
+              onClick={() => setLayerMenuOpen(o => !o)}
+              aria-label="เลือกรูปแบบแผนที่"
+              className={`w-9 h-9 rounded-xl shadow-md flex items-center justify-center transition-colors ${
+                layerMenuOpen ? 'bg-orange-500 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'
+              }`}
+            >
+              <Layers size={16} />
+            </button>
+          </div>
+
           <div className="absolute top-3 right-3 flex flex-col gap-2 z-[1000]">
             <button
               onClick={() => mapRef.current?.zoomIn()}

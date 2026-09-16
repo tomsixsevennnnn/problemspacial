@@ -236,6 +236,8 @@ export default function App() {
         category: item.category,
         description: item.description,
         image: item.image,
+        imagePosition: item.imagePosition,
+        imageScale: item.imageScale,
         costPrice: item.costPrice,
         active: item.active,
       }

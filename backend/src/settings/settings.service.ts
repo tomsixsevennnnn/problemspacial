@@ -1,5 +1,5 @@
 import { ConflictException, Injectable } from '@nestjs/common'
-import type { Settings } from '@prisma/client'
+import { Prisma, type Settings } from '@prisma/client'
 import { PrismaService } from '../prisma/prisma.service'
 import { UploadsService } from '../uploads/uploads.service'
 import { UpdateSettingsDto } from './dto/update-settings.dto'
@@ -53,26 +53,33 @@ export class SettingsService {
     return this.cached
   }
 
-  /** ถ้าเปลี่ยน/ลบ QR (promptPayQr เป็นค่าใหม่ที่ต่างจากเดิม) ลบไฟล์รูปเก่าทิ้งหลัง update สำเร็จ กันไฟล์ orphan ค้าง disk */
+  /** ถ้าเปลี่ยน/ลบ QR (promptPayQr เป็นค่าใหม่ที่ต่างจากเดิม) ลบไฟล์รูปเก่าทิ้งหลัง update สำเร็จ กันไฟล์ orphan ค้าง disk
+   *  ใช้ update() ครั้งเดียวผ่าน unique key ผสม (id, version) แทน updateMany+findUniqueOrThrow เดิม (2 round trip)
+   *  — DB จริงอยู่ที่ Railway แต่ละ round trip กิน ~1-2s ยุบเหลือ query เดียวช่วยให้บันทึกเร็วขึ้นชัดเจน
+   *  ส่วน before ดึงเฉพาะตอนจะแก้ promptPayQr เท่านั้น (ที่อื่นไม่ต้องเสีย round trip เพิ่มเปล่าๆ) */
   async update(dto: UpdateSettingsDto) {
-    const before = await this.get()
     const { expectedVersion, ...patch } = dto
+    const touchesQr = patch.promptPayQr !== undefined
+    const before = touchesQr ? await this.get() : null
 
-    // updateMany แทน update ตรงๆ เพราะต้องเช็ค version ใน where ด้วย — ถ้ามีคนแก้ไปแล้วก่อนหน้านี้ (version ไม่ตรง)
-    // count จะเป็น 0 แทนที่จะ throw จาก Prisma โดยตรง ทำให้แยกแยะ "conflict" ออกจาก error อื่นได้ชัดเจน
-    const result = await this.prisma.settings.updateMany({
-      where: { id: 1, version: expectedVersion },
-      data: { ...patch, version: { increment: 1 } },
-    })
-    if (result.count === 0) {
-      throw new ConflictException('มีคนแก้ไขค่าตั้งค่าไปแล้ว กรุณาโหลดหน้าใหม่')
+    let updated: Settings
+    try {
+      updated = await this.prisma.settings.update({
+        where: { id_version: { id: 1, version: expectedVersion } },
+        data: { ...patch, version: { increment: 1 } },
+      })
+    } catch (err) {
+      // P2025 = ไม่พบแถวที่ตรงเงื่อนไข where (id, version) — แปลว่ามีคนแก้ไปแล้วก่อนหน้านี้ (version ไม่ตรง)
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2025') {
+        throw new ConflictException('มีคนแก้ไขค่าตั้งค่าไปแล้ว กรุณาโหลดหน้าใหม่')
+      }
+      throw err
     }
 
-    const updated = await this.prisma.settings.findUniqueOrThrow({ where: { id: 1 } })
     this.cached = updated
     this.cachedAt = Date.now()
 
-    if (patch.promptPayQr !== undefined && before.promptPayQr && before.promptPayQr !== updated.promptPayQr) {
+    if (touchesQr && before?.promptPayQr && before.promptPayQr !== updated.promptPayQr) {
       await this.uploads.deleteManagedFile(before.promptPayQr)
     }
     return updated

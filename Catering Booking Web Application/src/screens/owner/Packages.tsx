@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { AlertCircle, Check, ChevronDown, Edit2, GripVertical, Plus, Trash2, X } from 'lucide-react'
+import { AlertCircle, Check, ChevronDown, Edit2, GripVertical, Loader2, Plus, Trash2, X } from 'lucide-react'
 import type { AppSettings, MenuItem, Package, PackageCourse } from '../../types'
 import { CATEGORY_MAP, orderedCategories, requiredCourses } from '../../data'
 import type { CreatePackageInput, UpdatePackageInput } from '../../api'
@@ -9,13 +9,43 @@ interface PackagesProps {
   /** คลังเมนูของร้าน — มาจากหน้า "เมนูอาหาร" */
   menus: MenuItem[]
   settings: AppSettings
-  onCreatePackage: (input: CreatePackageInput) => void
-  onUpdatePackage: (id: string, input: UpdatePackageInput) => void
-  onDeletePackage: (id: string) => void
+  onCreatePackage: (input: CreatePackageInput) => Promise<void>
+  onUpdatePackage: (id: string, input: UpdatePackageInput) => Promise<void>
+  onDeletePackage: (id: string) => Promise<void>
   onReorderPackages: (ids: string[]) => void
 }
 
 const emptyForm = { name: '', pricePerTable: 0, description: '', badge: '' }
+
+/**
+ * เทียบว่า courses ที่แก้ในฟอร์มเหมือนของเดิมทุกอย่างไหม (ต้องตรงกับ coursesUnchanged ฝั่ง backend
+ * ใน backend/src/packages/packages.service.ts ทุกประการ) — ถ้าเหมือนเดิม ไม่ต้องส่ง courses ไปด้วยตอนบันทึก
+ * กันไม่ให้ backend ต้องเสีย round trip พิเศษไป findUnique+เทียบเองอีกที (DB อยู่ไกล ~1-2s/round trip)
+ * ทำให้แก้แค่ชื่อ/ราคา/คำอธิบายเร็วขึ้นชัดเจน โดยไม่กระทบเคสที่แก้ courses จริงๆ
+ */
+const coursesUnchanged = (existing: PackageCourse[], incoming: PackageCourse[]): boolean => {
+  if (existing.length !== incoming.length) return false
+  const byNo = [...existing].sort((a, b) => a.no - b.no)
+  const incomingByNo = [...incoming].sort((a, b) => a.no - b.no)
+
+  return byNo.every((course, i) => {
+    const next = incomingByNo[i]
+    if (
+      course.no !== next.no ||
+      course.title !== next.title ||
+      (course.icon ?? '') !== (next.icon ?? '') ||
+      course.category !== next.category ||
+      course.choose !== next.choose
+    ) {
+      return false
+    }
+    const existingIds = new Set(course.items.map(item => item.id))
+    const incomingIds = new Set(next.items.map(item => item.id))
+    if (existingIds.size !== incomingIds.size) return false
+    for (const id of existingIds) if (!incomingIds.has(id)) return false
+    return true
+  })
+}
 
 /** ข้อใหม่ 1 ข้อ ตามประเภทอาหารที่เลือก */
 const newCourse = (no: number, categoryId: string): PackageCourse => ({
@@ -50,6 +80,8 @@ export default function Packages({
   const [dragCourseNo, setDragCourseNo] = useState<number | null>(null)
   const [confirmDelete, setConfirmDelete] = useState<Package | null>(null)
   const [dragPackageId, setDragPackageId] = useState<string | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [deleting, setDeleting] = useState(false)
 
   const openAdd = () => {
     setEditing(null)
@@ -157,8 +189,8 @@ export default function Packages({
   const emptyCourses = courses.filter(c => c.items.length === 0)
   const canSave = form.name.trim().length > 0 && courses.length > 0 && emptyCourses.length === 0
 
-  const handleSave = () => {
-    if (!canSave) return
+  const handleSave = async () => {
+    if (!canSave || saving) return
     const normalized = courses.map((c, i) => ({ ...c, no: i + 1 }))
     const courseInputs = normalized.map(c => ({
       no: c.no,
@@ -176,10 +208,19 @@ export default function Packages({
       menuLimit: normalized.length,
       courses: courseInputs,
     }
-    if (editing) {
-      onUpdatePackage(editing.id, base)
-    } else {
-      onCreatePackage({ ...base, features: ['บริการเสิร์ฟ'] })
+    setSaving(true)
+    try {
+      if (editing) {
+        // courses ไม่ได้แก้เลย (แค่แก้ชื่อ/ราคา/คำอธิบาย) — ไม่ต้องส่ง courses/menuLimit ไปด้วย
+        // ให้ backend รู้ทันทีจาก payload เองว่าไม่ต้องเสีย round trip ไปเช็คว่า courses เปลี่ยนไหม
+        const courseUnchanged = coursesUnchanged(editing.courses, normalized)
+        const { courses, menuLimit, ...rest } = base
+        await onUpdatePackage(editing.id, courseUnchanged ? rest : base)
+      } else {
+        await onCreatePackage({ ...base, features: ['บริการเสิร์ฟ'] })
+      }
+    } finally {
+      setSaving(false)
     }
     setShowModal(false)
   }
@@ -284,7 +325,11 @@ export default function Packages({
                   กำหนดเมนูที่ลูกค้าเลือกได้ในแต่ละประเภทอาหาร
                 </p>
               </div>
-              <button onClick={() => setShowModal(false)} className="w-8 h-8 flex items-center justify-center rounded-xl hover:bg-gray-100 text-gray-400">
+              <button
+                onClick={() => setShowModal(false)}
+                disabled={saving}
+                className="w-8 h-8 flex items-center justify-center rounded-xl hover:bg-gray-100 disabled:opacity-50 text-gray-400"
+              >
                 <X size={16} />
               </button>
             </div>
@@ -550,15 +595,20 @@ export default function Packages({
                   ลูกค้าจะเห็นเมนูเหล่านี้ในขั้นตอนเลือกเมนูอาหาร
                 </p>
               )}
-              <button onClick={() => setShowModal(false)} className="bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl px-5 py-2.5 text-sm font-semibold transition-colors">
+              <button
+                onClick={() => setShowModal(false)}
+                disabled={saving}
+                className="bg-gray-100 hover:bg-gray-200 disabled:opacity-50 text-gray-700 rounded-xl px-5 py-2.5 text-sm font-semibold transition-colors"
+              >
                 ยกเลิก
               </button>
               <button
                 onClick={handleSave}
-                disabled={!canSave}
-                className="bg-orange-500 hover:bg-orange-600 disabled:bg-gray-200 disabled:text-gray-400 text-white rounded-xl px-5 py-2.5 text-sm font-semibold transition-colors shadow-lg shadow-orange-200 disabled:shadow-none"
+                disabled={!canSave || saving}
+                className="flex items-center justify-center gap-2 bg-orange-500 hover:bg-orange-600 disabled:bg-gray-200 disabled:text-gray-400 text-white rounded-xl px-5 py-2.5 text-sm font-semibold transition-colors shadow-lg shadow-orange-200 disabled:shadow-none"
               >
-                บันทึกแพ็กเกจ
+                {saving && <Loader2 size={14} className="animate-spin" />}
+                {saving ? 'กำลังบันทึก...' : 'บันทึกแพ็กเกจ'}
               </button>
             </div>
           </div>
@@ -580,18 +630,26 @@ export default function Packages({
             <div className="flex gap-3 mt-6">
               <button
                 onClick={() => setConfirmDelete(null)}
-                className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl py-3 font-semibold text-sm transition-colors"
+                disabled={deleting}
+                className="flex-1 bg-gray-100 hover:bg-gray-200 disabled:opacity-50 text-gray-700 rounded-xl py-3 font-semibold text-sm transition-colors"
               >
                 ยกเลิก
               </button>
               <button
-                onClick={() => {
-                  onDeletePackage(confirmDelete.id)
+                onClick={async () => {
+                  setDeleting(true)
+                  try {
+                    await onDeletePackage(confirmDelete.id)
+                  } finally {
+                    setDeleting(false)
+                  }
                   setConfirmDelete(null)
                 }}
-                className="flex-1 bg-red-500 hover:bg-red-600 text-white rounded-xl py-3 font-semibold text-sm transition-colors"
+                disabled={deleting}
+                className="flex-1 flex items-center justify-center gap-2 bg-red-500 hover:bg-red-600 disabled:bg-red-300 text-white rounded-xl py-3 font-semibold text-sm transition-colors"
               >
-                ลบแพ็กเกจ
+                {deleting && <Loader2 size={14} className="animate-spin" />}
+                {deleting ? 'กำลังลบ...' : 'ลบแพ็กเกจ'}
               </button>
             </div>
           </div>

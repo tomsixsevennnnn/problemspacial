@@ -243,8 +243,8 @@ export default function CalendarView({ bookings, onUpdateBooking }: CalendarView
               {/* เปลี่ยนสถานะได้จากปฏิทินเลย */}
               <div>
                 <p className="text-xs text-gray-400 mb-2">อัปเดตสถานะ</p>
-                <div className="grid grid-cols-2 gap-2">
-                  {(['pending', 'confirmed', 'completed', 'cancelled'] as const).map(s => {
+                <div className="grid grid-cols-3 gap-2">
+                  {(['pending', 'confirmed', 'completed'] as const).map(s => {
                     const info = BOOKING_STATUS_INFO[s]
                     const isActive = popup.status === s
                     return (
@@ -261,6 +261,19 @@ export default function CalendarView({ bookings, onUpdateBooking }: CalendarView
                     )
                   })}
                 </div>
+
+                {/* ยกเลิก — แยกออกมาต่างหากและเน้นสีแดงเสมอ กันกดพลาดปนกับสถานะปกติ */}
+                <button
+                  onClick={() => onUpdateBooking(popup.id, { status: 'cancelled' })}
+                  className={`w-full mt-2 flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs font-semibold transition-all ${
+                    popup.status === 'cancelled'
+                      ? 'bg-red-600 text-white border-2 border-red-700'
+                      : 'bg-red-50 text-red-600 border border-red-200 hover:bg-red-100'
+                  }`}
+                >
+                  {popup.status === 'cancelled' && <Check size={11} />}
+                  ยกเลิกการจอง
+                </button>
               </div>
             </div>
           </div>

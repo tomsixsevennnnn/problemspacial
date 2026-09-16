@@ -189,7 +189,7 @@ export default function SelectMenu({ navigate, user, notifCount, shopName, packa
                     isSelected ? 'border-orange-500 shadow-orange-100' : 'border-gray-100'
                   } ${isFixed ? 'cursor-default' : 'hover:shadow-md hover:border-orange-200 cursor-pointer'}`}
                 >
-                  <div className="relative aspect-[4/3] bg-gray-100">
+                  <div className="relative aspect-[4/3] bg-gray-100 overflow-hidden">
                     <DishTile item={item} category={activeCourse.category} emojiClass="text-4xl" />
                     {isSelected && (
                       <div className="absolute inset-0 bg-orange-500/20 flex items-center justify-center">

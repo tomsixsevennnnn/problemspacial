@@ -234,7 +234,7 @@ export default function Menus({ menus, packages, settings, onSaveMenu, onDeleteM
                   isActive ? 'border-gray-100' : 'border-gray-100 opacity-60'
                 }`}
               >
-                <div className="relative aspect-video bg-gray-100">
+                <div className="relative aspect-video bg-gray-100 overflow-hidden">
                   <DishTile item={menu} emojiClass="text-3xl" className={isActive ? '' : 'grayscale'} />
                   {!isActive && (
                     <div className="absolute inset-0 bg-gray-900/30 flex items-center justify-center">
@@ -410,6 +410,7 @@ export default function Menus({ menus, packages, settings, onSaveMenu, onDeleteM
                         }}
                       />
                       <button
+                        onPointerDown={e => e.stopPropagation()}
                         onClick={() => setForm(f => ({ ...f, imagePosition: CENTER_POSITION, imageScale: DEFAULT_SCALE }))}
                         className="absolute top-2 right-2 flex items-center gap-1 text-[11px] font-medium bg-white/90 hover:bg-white text-gray-700 px-2.5 py-1.5 rounded-lg shadow-sm transition-colors"
                       >

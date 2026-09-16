@@ -519,16 +519,16 @@ export default function Orders({ bookings, menus, settings, onUpdateBooking, onF
               <div className="max-w-2xl mx-auto space-y-2">
               <p className="text-xs font-semibold text-gray-400 mb-3">อัปเดตสถานะ</p>
               <div className="grid grid-cols-3 gap-2">
-                {(['pending', 'confirmed', 'completed','cancelled'] as const).map(s => {
+                {(['pending', 'confirmed', 'completed'] as const).map(s => {
                   const sc = STATUS_CONFIG[s]
                   const isActive = selected.status === s
-                  
+
                   return (
                     <button
                       key={s}
                       onClick={() => updateStatus(selected.id, s)}
                       className={`flex items-center justify-center gap-1 py-2.5 rounded-xl text-xs font-semibold transition-all ${
-                        isActive ? `${sc.bg} ${sc.text} border-2 ${s === 'confirmed' ? 'border-green-300' : s === 'pending' ? 'border-yellow-300' : 'border-gray-300'}` : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                        isActive ? `${sc.bg} ${sc.text} border-2 ${s === 'confirmed' ? 'border-green-300' : 'border-yellow-300'}` : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
                       }`}
                     >
                       {isActive && <Check size={12} />}
@@ -537,6 +537,19 @@ export default function Orders({ bookings, menus, settings, onUpdateBooking, onF
                   )
                 })}
               </div>
+
+              {/* ยกเลิก — แยกออกมาต่างหากและเน้นสีแดงเสมอ กันกดพลาดปนกับสถานะปกติ */}
+              <button
+                onClick={() => updateStatus(selected.id, 'cancelled')}
+                className={`w-full flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-xs font-semibold transition-all ${
+                  selected.status === 'cancelled'
+                    ? 'bg-red-600 text-white border-2 border-red-700'
+                    : 'bg-red-50 text-red-600 border border-red-200 hover:bg-red-100'
+                }`}
+              >
+                {selected.status === 'cancelled' && <Check size={12} />}
+                ยกเลิกการจอง
+              </button>
               </div>
             </div>
           </div>

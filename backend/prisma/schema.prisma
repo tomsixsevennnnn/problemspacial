@@ -39,6 +39,10 @@ model MenuItem {
   category    String
   description String          @default("")
   image       String?
+  /** ตำแหน่งครอปรูป { x, y } เป็น % ของกรอบ — คู่กับ imageScale ใช้จัดกรอบตอนแสดงผล (object-position/transform) */
+  imagePosition Json?
+  /** ระดับซูมรูป (1 = ปกติ, สูงสุด 3) — คู่กับ imagePosition */
+  imageScale  Float?
   /** ราคาทุนต่อจาน (บาท) — เจ้าของร้านกรอกตรงๆ ไม่คำนวณจากวัตถุดิบ */
   costPrice   Int?
   active      Boolean         @default(true)
@@ -179,4 +183,8 @@ model Settings {
   /** optimistic concurrency — ป้องกันสองแท็บ/สองคนแก้ค่าตั้งค่าพร้อมกันแล้วทับกันเงียบๆ (ดู settings.service.ts) */
   version                Int    @default(1)
   updatedAt              DateTime @default(now()) @updatedAt
+
+  /** ใช้เป็น where ของ update() ครั้งเดียวแทน updateMany+findUniqueOrThrow (2 round trip) — DB จริงอยู่ที่ Railway
+   *  แต่ละ round trip กิน ~1-2s ยุบเหลือ query เดียวช่วยให้หน้าตั้งค่าบันทึกเร็วขึ้นชัดเจน (ดู settings.service.ts) */
+  @@unique([id, version])
 }

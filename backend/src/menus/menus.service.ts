@@ -35,7 +35,11 @@ export class MenusService {
 
   create(dto: CreateMenuItemDto) {
     this.invalidate()
-    return this.prisma.menuItem.create({ data: dto })
+    // imagePosition เป็น class instance จาก class-transformer — ต้อง spread เป็น plain object ก่อนส่งเข้า Prisma
+    // (คอลัมน์ Json ต้องการ index signature ตรงๆ, instance ของ class ไม่ผ่าน type check ของ InputJsonObject)
+    return this.prisma.menuItem.create({
+      data: { ...dto, imagePosition: dto.imagePosition ? { ...dto.imagePosition } : undefined },
+    })
   }
 
   /** ถ้าเปลี่ยนรูป (dto.image เป็นค่าใหม่ที่ต่างจากเดิม) ลบไฟล์รูปเก่าทิ้งหลัง update สำเร็จ กันไฟล์ orphan ค้าง disk */
@@ -43,7 +47,10 @@ export class MenusService {
     this.invalidate()
     const before = dto.image !== undefined ? await this.prisma.menuItem.findUnique({ where: { id } }) : null
 
-    const after = await this.prisma.menuItem.update({ where: { id }, data: dto })
+    const after = await this.prisma.menuItem.update({
+      where: { id },
+      data: { ...dto, imagePosition: dto.imagePosition ? { ...dto.imagePosition } : undefined },
+    })
 
     if (before && before.image && before.image !== after.image) {
       await this.uploads.deleteManagedFile(before.image)
