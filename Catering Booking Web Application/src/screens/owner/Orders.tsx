@@ -50,9 +50,12 @@ export default function Orders({ bookings, menus, settings, onUpdateBooking, onF
   const [noteDraft, setNoteDraft] = useState('')
   const [slipZoom, setSlipZoom] = useState<string | null>(null)
 
-  // อ่านจาก bookings ตรง ๆ เพื่อให้แผงขวาอัปเดตตามทันทีที่ข้อมูลเปลี่ยน (bookings ยังโหลดเต็มชุดเหมือนเดิม
-  // เพราะ Dashboard/Reports/Calendar/Documents ยังต้องใช้ — เฉพาะตารางรายการที่นี่ที่ paginate แยกจากมัน)
-  const selected = selectedId ? bookings.find(b => b.id === selectedId) ?? null : null
+  // หาใน pageData ก่อน (ข้อมูลสดจากตารางที่ paginate แยกต่างหาก) — bookings ตัวเต็มโหลดครั้งเดียวตอนเปิดแอป
+  // ไม่ได้ refetch จนกว่าจะ reload หน้า ถ้าอ้างจาก bookings ตรง ๆ รายการที่เพิ่งจองเข้ามาใหม่จะกดเปิดไม่ได้
+  // (หาไม่เจอใน bookings) จนกว่าจะ refresh ทั้งหน้า — fallback ไป bookings ไว้เผื่อกรณีหน้า/ค้นหาเปลี่ยนไปแล้ว
+  const selected = selectedId
+    ? (pageData?.items.find(b => b.id === selectedId) ?? bookings.find(b => b.id === selectedId) ?? null)
+    : null
 
   // debounce ช่องค้นหา 300ms กันยิง request รัวๆ ทุกตัวอักษรที่พิมพ์
   useEffect(() => {
@@ -65,26 +68,56 @@ export default function Orders({ bookings, menus, settings, onUpdateBooking, onF
     setPage(1)
   }, [debouncedSearch])
 
-  const loadPage = useCallback(() => {
-    setLoadingPage(true)
-    setPageError(null)
-    onFetchBookingsPage(page, PAGE_SIZE, debouncedSearch)
-      .then(res => setPageData({ items: res.items, total: res.total }))
-      .catch(err => setPageError(err instanceof Error ? err.message : 'โหลดรายการไม่สำเร็จ'))
-      .finally(() => setLoadingPage(false))
-  }, [page, debouncedSearch, onFetchBookingsPage])
+  /** silent = true ตอน poll เบื้องหลัง ไม่โชว์ loading spinner/error banner กันตารางกระพริบทุก 15 วิ */
+  const loadPage = useCallback(
+    (opts: { silent?: boolean } = {}) => {
+      if (!opts.silent) setLoadingPage(true)
+      if (!opts.silent) setPageError(null)
+      onFetchBookingsPage(page, PAGE_SIZE, debouncedSearch)
+        .then(res => setPageData({ items: res.items, total: res.total }))
+        .catch(err => {
+          if (!opts.silent) setPageError(err instanceof Error ? err.message : 'โหลดรายการไม่สำเร็จ')
+        })
+        .finally(() => {
+          if (!opts.silent) setLoadingPage(false)
+        })
+    },
+    [page, debouncedSearch, onFetchBookingsPage]
+  )
 
   useEffect(() => {
     loadPage()
   }, [loadPage])
 
+  // realtime — poll รายการหน้าปัจจุบันทุก 15 วินาที ให้เห็นรายการจองใหม่/สถานะที่เปลี่ยนจากที่อื่น (เช่นลูกค้าจองเข้ามา
+  // หรือแก้จากอีกแท็บ) โดยไม่ต้องสลับหน้าไปมาเอง — ก่อนหน้านี้ตารางโหลดแค่ตอน mount/เปลี่ยนหน้า/ค้นหาเท่านั้น
+  // หยุด poll เมื่อสลับไปแท็บ/แอปอื่น (document.hidden) กันยิง request เปล่าๆ ตอนไม่มีใครดูอยู่ (ดู pattern เดียวกันใน App.tsx)
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (!document.hidden) loadPage({ silent: true })
+    }, 15000)
+    const onVisible = () => {
+      if (!document.hidden) loadPage({ silent: true })
+    }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => {
+      clearInterval(interval)
+      document.removeEventListener('visibilitychange', onVisible)
+    }
+  }, [loadPage])
+
   const filtered = pageData?.items ?? []
   const totalPages = pageData ? Math.max(1, Math.ceil(pageData.total / PAGE_SIZE)) : 1
 
+  /** สะท้อน patch เข้า pageData ทันที (ไม่ต้องรอ refetch) — pageData เป็นแหล่งข้อมูลหลักของแผงขวา (ดู `selected`
+   *  ด้านบน) ถ้าไม่ sync ตรงนี้ด้วย การแก้ไขจะไม่ขึ้นในแผงจนกว่าจะ poll/เปลี่ยนหน้ารอบถัดไป */
+  const patchPageRow = (id: string, patch: Partial<Booking>) => {
+    setPageData(pd => (pd ? { ...pd, items: pd.items.map(b => (b.id === id ? { ...b, ...patch } : b)) } : pd))
+  }
+
   const updateStatus = (id: string, status: Booking['status']) => {
     onUpdateBooking(id, { status })
-    // อัปเดตแถวในตารางทันที ไม่ต้องรอ refetch — เห็นผลไวและกันสถานะเก่าค้างจนกว่าจะเปลี่ยนหน้า/ค้นหาใหม่
-    setPageData(pd => (pd ? { ...pd, items: pd.items.map(b => (b.id === id ? { ...b, status } : b)) } : pd))
+    patchPageRow(id, { status })
   }
 
   /* --- แผนกำลังคน ------------------------------------------------- */
@@ -110,12 +143,14 @@ export default function Orders({ bookings, menus, settings, onUpdateBooking, onF
   /** บันทึกทั้งจำนวนที่ระบบคำนวณและจำนวนที่ปรับแก้จริง ไว้อ้างอิงภายหลัง */
   const saveStaff = () => {
     if (!selected || !staffDraft) return
-    onUpdateBooking(selected.id, {
+    const patch = {
       staffAuto: toPlan(calculateStaff(selected.tables)),
       staffActual: staffDraft,
       staffNote: noteDraft.trim(),
       staffSavedAt: new Date().toISOString(),
-    })
+    }
+    onUpdateBooking(selected.id, patch)
+    patchPageRow(selected.id, patch)
   }
 
   return (

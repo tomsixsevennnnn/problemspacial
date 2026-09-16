@@ -182,7 +182,8 @@ export class PackagesService {
     if (!before) throw new NotFoundException('ไม่พบแพ็กเกจนี้')
 
     const after = await this.prisma.package.update({ where: { id }, data: { deletedAt: new Date() } })
-    await this.audit.log(auth0Sub, 'package.delete', 'Package', id, before, after)
+    // ไม่ await — เหตุผลเดียวกับ bookings.service.ts (ดูคอมเมนต์ที่นั่น) ไม่บล็อกการลบเพื่อรอเขียน audit log
+    void this.audit.log(auth0Sub, 'package.delete', 'Package', id, before, after)
     return after
   }
 

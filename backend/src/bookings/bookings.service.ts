@@ -186,7 +186,10 @@ export class BookingsService {
         ...(dto.staffActual ? { staffSavedAt: new Date() } : {}),
       },
     })
-    await this.audit.log(auth0Sub, 'booking.update', 'Booking', id, before, after)
+    // ไม่ await — audit.log เขียนลง DB เพิ่มอีก 2 round trip (หา user + สร้าง log) ซึ่ง DB อยู่ที่ Railway
+    // ไกลจากเซิร์ฟเวอร์ (~1-2s/round trip) ปล่อยให้เขียนเบื้องหลังแทนที่จะบล็อกปุ่มเปลี่ยนสถานะของ owner
+    // ให้รอเกือบเท่าตัว — audit.log จับ error เองอยู่แล้ว (ไม่มีวันพังการทำงานจริงแม้เขียน log ไม่สำเร็จ)
+    void this.audit.log(auth0Sub, 'booking.update', 'Booking', id, before, after)
     return after
   }
 

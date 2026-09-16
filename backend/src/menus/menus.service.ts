@@ -65,7 +65,8 @@ export class MenusService {
     if (!before) throw new NotFoundException('ไม่พบเมนูนี้')
 
     const after = await this.prisma.menuItem.update({ where: { id }, data: { deletedAt: new Date() } })
-    await this.audit.log(auth0Sub, 'menu.delete', 'MenuItem', id, before, after)
+    // ไม่ await — เหตุผลเดียวกับ bookings.service.ts (ดูคอมเมนต์ที่นั่น) ไม่บล็อกการลบเพื่อรอเขียน audit log
+    void this.audit.log(auth0Sub, 'menu.delete', 'MenuItem', id, before, after)
     return after
   }
 }

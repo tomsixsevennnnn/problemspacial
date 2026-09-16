@@ -165,7 +165,10 @@ export default function App() {
     }
   }, [isAuthenticated, getAccessTokenSilently, auth0User, retryKey, logout])
 
-  /** poll ค่าตั้งค่าร้านทุก 20 วินาที — ให้ทุกเครื่องเห็นการแก้ไข (เช่น ชื่อร้าน) โดยอัตโนมัติ ไม่ต้องกด refresh เอง
+  /** poll ข้อมูลที่แชร์ข้ามเครื่อง/แท็บทุก 15 วินาที — settings, bookings (กระทบกระดิ่งแจ้งเตือนใน OwnerLayout +
+   *  Dashboard/Calendar/Reports/Documents ด้วย), availability (คิววันที่เต็มตอนลูกค้าเลือกวันจัดงาน), packages, menus
+   *  ให้ทุกเครื่องเห็นการจอง/แก้ไขจากที่อื่นโดยอัตโนมัติ ไม่ต้องกด refresh เอง — เทียบ JSON ก่อน setState ทุกตัว
+   *  กัน re-render เปล่าๆ ตอนข้อมูลไม่ได้เปลี่ยนจริง (poll ส่วนใหญ่จะชนกับ cache ฝั่ง backend อยู่แล้ว ไม่ได้แพงเพิ่ม)
    *  หยุด poll เมื่อสลับไปแท็บ/แอปอื่น (document.hidden) กันยิง request เปล่าๆ ตอนไม่มีใครดูอยู่ */
   useEffect(() => {
     if (!dataLoaded) return
@@ -173,8 +176,20 @@ export default function App() {
     const pollOnce = async () => {
       try {
         const token = await getAccessTokenSilently()
-        const fresh = await api.settings(token)
-        setSettings(prev => (JSON.stringify(prev) === JSON.stringify(fresh) ? prev : fresh))
+        const [freshSettings, freshBookings, freshAvailability, freshPackages, freshMenus] = await Promise.all([
+          api.settings(token),
+          api.bookings(token),
+          api.bookingsAvailability(token),
+          api.packages(token),
+          api.menus(token),
+        ])
+        setSettings(prev => (JSON.stringify(prev) === JSON.stringify(freshSettings) ? prev : freshSettings))
+        setBookings(prev => (JSON.stringify(prev) === JSON.stringify(freshBookings) ? prev : freshBookings))
+        setAvailability(prev =>
+          JSON.stringify(prev) === JSON.stringify(freshAvailability) ? prev : freshAvailability
+        )
+        setPackages(prev => (JSON.stringify(prev) === JSON.stringify(freshPackages) ? prev : freshPackages))
+        setMenus(prev => (JSON.stringify(prev) === JSON.stringify(freshMenus) ? prev : freshMenus))
       } catch {
         // เงียบไว้ — ไม่ใช่รายการที่ผู้ใช้กดเอง ไม่ต้องเด้ง error banner รบกวน แค่ลองใหม่รอบถัดไป
       }
@@ -182,7 +197,7 @@ export default function App() {
 
     const interval = setInterval(() => {
       if (!document.hidden) pollOnce()
-    }, 20000)
+    }, 15000)
     // กลับมาที่แท็บนี้อีกครั้ง — ดึงค่าล่าสุดทันทีแทนที่จะรอรอบ poll ถัดไป
     const onVisible = () => {
       if (!document.hidden) pollOnce()
@@ -433,23 +448,39 @@ export default function App() {
       setBooking(initialBooking)
     })
 
-  /** แก้ไขใบจอง — แยกปลายทางตาม patch: ลูกค้าแนบสลิป vs เจ้าของร้านเปลี่ยนสถานะ/บันทึกแผนกำลังคน */
-  const handleUpdateBooking = (id: string, patch: Partial<Booking>) =>
-    runAction(async () => {
-      const token = await withToken()
-      const updated =
-        'paymentSlip' in patch && patch.paymentSlip
-          ? await api.uploadPaymentSlip(token, id, patch.paymentSlip)
+  /** แก้ไขใบจอง — แยกปลายทางตาม patch: ลูกค้าแนบสลิป vs เจ้าของร้านเปลี่ยนสถานะ/บันทึกแผนกำลังคน
+   *  อัปเดต state ทันทีแบบ optimistic ก่อนรอ API (ปุ่มเปลี่ยนสถานะใน Calendar/Orders จะได้ไม่รู้สึกค้าง — DB จริง
+   *  อยู่ที่ Railway ไกล ~1-2s/round trip) ถ้า API พังค่อย rollback กลับของเดิม ยกเว้นตอนอัปโหลดสลิป (ไม่รู้ URL
+   *  ล่วงหน้าก่อนอัปโหลดเสร็จ เลย optimistic ไม่ได้) */
+  const handleUpdateBooking = (id: string, patch: Partial<Booking>) => {
+    const isSlipUpload = 'paymentSlip' in patch && !!patch.paymentSlip
+    const prevBookings = bookings
+    if (!isSlipUpload) {
+      setBookings(prev => prev.map(b => (b.id === id ? { ...b, ...patch } : b)))
+    }
+    return runAction(async () => {
+      try {
+        const token = await withToken()
+        const updated = isSlipUpload
+          ? await api.uploadPaymentSlip(token, id, patch.paymentSlip!)
           : await api.updateBookingAsOwner(token, id, {
               status: patch.status,
               staffAuto: patch.staffAuto,
               staffActual: patch.staffActual,
               staffNote: patch.staffNote,
             })
-      setBookings(prev => prev.map(b => (b.id === id ? updated : b)))
-      // เปลี่ยนสถานะ (เช่นยกเลิกงาน) กระทบคิวรับงานที่ลูกค้าเห็น — ดึงใหม่ให้ตรงกัน กันวันนั้นค้างว่า "เต็ม" อยู่
-      if (patch.status !== undefined) setAvailability(await api.bookingsAvailability(token))
+        setBookings(prev => prev.map(b => (b.id === id ? updated : b)))
+        // เปลี่ยนสถานะ (เช่นยกเลิกงาน) กระทบคิวรับงานที่ลูกค้าเห็น — ดึงใหม่ให้ตรงกัน กันวันนั้นค้างว่า "เต็ม" อยู่
+        // ไม่ await ตรงนี้ ปล่อยดึงเบื้องหลังแทนที่จะบล็อก UI ต่อ (ไม่กระทบความถูกต้อง แค่ค่า availability ของลูกค้า)
+        if (patch.status !== undefined) {
+          void api.bookingsAvailability(token).then(setAvailability)
+        }
+      } catch (err) {
+        if (!isSlipUpload) setBookings(prevBookings)
+        throw err
+      }
     })
+  }
 
   // กำลังตรวจสอบ session ของ Auth0 (โหลดครั้งแรก / กลับจาก redirect)
   if (isLoading) {
