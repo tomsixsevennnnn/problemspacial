@@ -154,7 +154,7 @@ export default function Menus({ menus, packages, settings, onSaveMenu, onDeleteM
       category: form.category,
       description: form.description.trim(),
       active: editing?.active ?? true,
-      ...(form.costPrice > 0 ? { costPrice: form.costPrice } : {}),
+      costPrice: form.costPrice,
       // ส่ง image เสมอแม้เป็นค่าว่าง (ไม่ใช่แค่ตอนมีรูป) — ไม่งั้นตอนกด "ลบรูป" แล้วบันทึก คีย์ image จะหาย
       // ไปจาก payload ทั้งอัน ทำให้ backend ไม่รู้ว่าต้องล้างค่าเดิม รูปเก่าเลยค้างอยู่ใน DB ต่อไปเงียบๆ (ข้อ 7)
       image: form.image.trim(),
@@ -252,7 +252,7 @@ export default function Menus({ menus, packages, settings, onSaveMenu, onDeleteM
                     <p className="text-[10px] text-blue-500 mb-2">ใช้ใน {usedIn.length} แพ็กเกจ</p>
                   )}
 
-                  {menu.costPrice != null && (
+                  {!!menu.costPrice && (
                     <div className="flex items-center gap-2 text-[10px] mb-2">
                       <span className="text-gray-400">ทุน ฿{menu.costPrice.toLocaleString()}</span>
                     </div>

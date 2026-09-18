@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common'
 import type { MenuItem } from '@prisma/client'
 import { AuditService } from '../audit/audit.service'
+import { PackagesService } from '../packages/packages.service'
 import { PrismaService } from '../prisma/prisma.service'
 import { UploadsService } from '../uploads/uploads.service'
 import { CreateMenuItemDto } from './dto/create-menu-item.dto'
@@ -12,6 +13,7 @@ export class MenusService {
     private prisma: PrismaService,
     private audit: AuditService,
     private uploads: UploadsService,
+    private packages: PackagesService,
   ) {}
 
   /** cache รายการเมนูไว้ในหน่วยความจำ — DB จริงอยู่ที่ Railway แต่ละ query กิน ~300-800ms (ดู settings.service.ts)
@@ -29,8 +31,11 @@ export class MenusService {
     return menus
   }
 
+  /** ล้างทั้ง cache ของตัวเองและของ PackagesService — packages cache ฝัง MenuItem เต็มไว้ในแต่ละ course
+   *  (include: courses.items) เมนูแก้/ลบแล้วไม่ล้างตามจะเห็นข้อมูลเมนูเก่าซ้อนอยู่ในแพ็กเกจได้นานสุด 30s */
   private invalidate() {
     this.cached = null
+    this.packages.invalidate()
   }
 
   create(dto: CreateMenuItemDto) {

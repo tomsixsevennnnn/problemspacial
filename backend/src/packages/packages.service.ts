@@ -73,7 +73,9 @@ export class PackagesService {
     return packages
   }
 
-  private invalidate() {
+  /** public เพราะ MenusService ก็ต้องเรียกล้าง cache นี้ด้วย — packages cache ฝัง MenuItem เต็มไว้ในแต่ละ
+   *  course (include: courses.items) เมนูแก้/ลบแล้วไม่ล้าง cache นี้ตาม จะเห็นข้อมูลเมนูเก่าซ้อนอยู่ในแพ็กเกจได้ */
+  invalidate() {
     this.cached = null
   }
 
@@ -117,6 +119,7 @@ export class PackagesService {
           features: dto.features,
           badge: dto.badge,
         },
+        include: { courses: { include: { items: true }, orderBy: { no: 'asc' } } },
       })
     }
 

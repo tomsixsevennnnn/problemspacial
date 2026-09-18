@@ -30,6 +30,10 @@ interface SettingsProps {
   settings: AppSettings
   onUpdateSettings: (patch: Partial<AppSettings>) => Promise<void>
   onUploadImage: (kind: UploadKind, dataUrl: string) => Promise<string>
+  /** เปลี่ยนค่า (Date.now()) เฉพาะตอน onUpdateSettings เพิ่งเซฟชนกัน (409) แล้วกู้ settings ใหม่มาแทน — สัญญาณ
+   *  นี้ส่งมาจาก App.tsx โดยตรง เพราะ runAction ที่ห่อ onUpdateSettings กลืน error ทั้งหมดไว้ ไม่ throw ต่อมาให้
+   *  ที่นี่ ทำให้ try/catch รอบ onUpdateSettings ในไฟล์นี้ใช้แยกแยะสำเร็จ/ชนกันเองไม่ได้ */
+  conflictAt: number
 }
 
 const SHOP_FIELDS: { key: keyof AppSettings['shopInfo']; label: string; placeholder: string }[] = [
@@ -53,7 +57,7 @@ const WAGE_FIELDS: { key: 'wageChef' | 'wageAssistant' | 'wageServerPerTable' | 
   { key: 'wageDishwasher', label: 'ค่าแรงพนักงานล้างจาน', unit: 'บาท/คน/งาน' },
 ]
 
-export default function Settings({ settings, onUpdateSettings, onUploadImage }: SettingsProps) {
+export default function Settings({ settings, onUpdateSettings, onUploadImage, conflictAt }: SettingsProps) {
   const [form, setForm] = useState<AppSettings>(settings)
   const [savedAt, setSavedAt] = useState<number | null>(null)
   const [saving, setSaving] = useState(false)
@@ -104,12 +108,18 @@ export default function Settings({ settings, onUpdateSettings, onUploadImage }: 
     setForm(f => (JSON.stringify(f) === JSON.stringify(prevSettings) ? settings : f))
   }, [settings])
 
-  // sync แค่ version เข้า form เสมอ แม้กำลังแก้ไขค้างอยู่ (dirty) — ไม่งั้นถ้าเจอ save ชนกัน (409) แล้ว backend
-  // ส่ง settings ใหม่มาแทนที่ ตัว form (ซึ่งมีข้อมูลที่แก้ค้างอยู่ ไม่ได้ถูกแทนที่ทั้งก้อนตาม effect ด้านบน)
-  // จะยังถือ version เก่าอยู่ กด save ซ้ำครั้งที่สองจะชนอีกไม่จบไม่สิ้น
+  // sync version เข้า form เฉพาะตอน conflictAt เปลี่ยน (App.tsx เพิ่งเซฟชนกัน 409 แล้วกู้ settings ใหม่มาแทน)
+  // เท่านั้น — ห้าม sync ทุกครั้งที่ settings.version เปลี่ยนเฉยๆ เพราะ version เปลี่ยนได้จาก background poll
+  // ตอนคนอื่นแก้ field อื่นที่ไม่เกี่ยวกับที่เรากำลังแก้อยู่ด้วย ถ้า sync version ไปเงียบๆ ระหว่าง dirty การกด save
+  // ครั้งถัดไปจะผ่าน version check ได้พอดี (ทั้งที่ฟิลด์อื่นในฟอร์มยังเป็นค่าเก่า) กลายเป็นทับการแก้ไขของอีกคน
+  // แบบไม่มี 409 เตือนเลย — ต้องปล่อยให้ save จริงชน 409 ก่อน (ดูคอมเมนต์ที่ handleUpdateSettings ใน App.tsx)
+  // ที่นี่แค่กัน "ชนซ้ำไม่จบสิ้น" ตอน retry หลัง 409 ครั้งแรก ด้วย conflictAt ที่ App.tsx ส่งสัญญาณมาโดยตรง
+  // (ใช้ try/catch รอบ onUpdateSettings ในไฟล์นี้แยกสำเร็จ/ชนกันเองไม่ได้ เพราะ runAction ฝั่ง App.tsx กลืน error
+  // ทั้งหมดไว้ ไม่ throw ต่อมาให้ที่นี่)
   useEffect(() => {
-    setForm(f => (f.version === settings.version ? f : { ...f, version: settings.version }))
-  }, [settings.version])
+    if (conflictAt === 0) return
+    setForm(f => ({ ...f, version: settings.version }))
+  }, [conflictAt])
 
   const dirty = JSON.stringify(form) !== JSON.stringify(settings)
 
@@ -194,6 +204,9 @@ export default function Settings({ settings, onUpdateSettings, onUploadImage }: 
     if (saving) return
     setSaving(true)
     try {
+      // หมายเหตุ: onUpdateSettings ห่อด้วย runAction ใน App.tsx ซึ่งกลืน error ทั้งหมดไว้ (ไม่ throw ต่อมาที่นี่)
+      // ตอนเซฟชนกัน (409) จึงยังมาถึง setSavedAt แม้จริงๆ ไม่สำเร็จ — ผู้ใช้เห็น error banner จาก App.tsx แทน
+      // ส่วนการ sync version กลับเข้า form หลังชนกันอยู่ที่ effect ด้านบน (ฟัง conflictAt ที่ App.tsx ส่งมา)
       await onUpdateSettings(form)
       setSavedAt(Date.now())
     } finally {

@@ -18,6 +18,7 @@ import {
   DEFAULT_WAGE_SERVER_PER_TABLE,
 } from './costing'
 import { roleFromAuth0User, type AppRole } from './auth'
+import { isSessionExpiredError } from './sessionExpired'
 import { DEFAULT_UNREAD_WINDOW_MS, unreadNotificationCount } from './notifications'
 import { api, type BackendUser, type CreatePackageInput, type UpdatePackageInput, type UploadKind } from './api'
 import ErrorBanner from './components/ErrorBanner'
@@ -80,6 +81,23 @@ const initialBooking: BookingData = {
 
 export default function App() {
   const { isAuthenticated, isLoading, user: auth0User, logout, getAccessTokenSilently } = useAuth0()
+
+  /** เคลียร์ session ของ Auth0 SDK แล้วเด้งกลับหน้า login — ใช้ทั้งตอนกดปุ่ม "ออกจากระบบ" และตอน token/session
+   *  หมดอายุระหว่างใช้งาน (getAccessTokenSilently ขอ token ใหม่ไม่ได้ หรือ backend ตอบ 401) ดู isSessionExpiredError */
+  const forceLogout = () => {
+    // cacheLocation="localstorage" (main.tsx) แปลว่า session ของ Auth0 SDK เองก็อยู่ใน localStorage —
+    // ปกติ logout() จะล้างให้ แต่ถ้ามี request ค้าง (เช่น token refresh) ชนกับตอน logout อาจเขียนทับกลับมาได้
+    // ล้างเองซ้ำให้ชัวร์ก่อน redirect กันเคส "ออกจากระบบแล้วกลับเข้ามาเจอ session เดิมค้างอยู่"
+    try {
+      Object.keys(localStorage)
+        .filter(key => key.startsWith('@@auth0spajs@@'))
+        .forEach(key => localStorage.removeItem(key))
+    } catch {
+      // เพิกเฉยได้ถ้า localStorage ใช้งานไม่ได้ (เช่น private mode)
+    }
+    logout({ logoutParams: { returnTo: window.location.origin } })
+  }
+
   const [screen, setScreen] = useState<Screen>('login')
   const [booking, setBooking] = useState<BookingData>(initialBooking)
   // รายการจองทั้งหมด — ใช้ร่วมกันทั้งปฏิทินร้าน ประวัติ และเอกสาร (owner เห็นทุกใบจอง, customer เห็นเฉพาะของตัวเอง)
@@ -91,6 +109,10 @@ export default function App() {
   const [menus, setMenus] = useState<MenuItem[]>([])
   // ค่าตั้งค่าร้าน — แก้ได้จากหน้า "ตั้งค่า" ฝั่งเจ้าของร้าน มีผลกับค่าขนส่ง มัดจำ และข้อมูลบนเอกสารทันที
   const [settings, setSettings] = useState<AppSettings>(initialSettings)
+  // จับเวลาที่เพิ่งกู้ settings ใหม่มาแทนหลังเซฟชนกัน (409) — ส่งให้ Settings.tsx แยกแยะออกจาก settings.version
+  // ที่ขยับเฉยๆ จาก background poll ปกติ (ดูคอมเมนต์ที่ handleUpdateSettings/Settings.tsx) runAction ด้านล่าง
+  // กลืน throw ทั้งหมดไว้ไม่ส่งต่อให้ caller เลยต้องส่งสัญญาณนี้แยกออกมาต่างหาก ไม่ใช้ try/catch ฝั่ง Settings.tsx
+  const [settingsConflictAt, setSettingsConflictAt] = useState(0)
   // โปรไฟล์ผู้ใช้จาก backend (ผูกกับ Auth0 sub) — เป็นแหล่งความจริงเดียวของ user profile
   const [backendUser, setBackendUser] = useState<BackendUser | null>(null)
   const [dataLoaded, setDataLoaded] = useState(false)
@@ -150,13 +172,13 @@ export default function App() {
         setDataLoaded(true)
       } catch (err) {
         if (cancelled) return
-        const message = err instanceof Error ? err.message : ''
-        // refresh token หมดอายุ/ถูกเพิกถอน — retry ซ้ำไม่มีทางสำเร็จ ต้องพากลับไป login ใหม่เท่านั้น
-        if (/refresh token/i.test(message)) {
-          logout({ logoutParams: { returnTo: window.location.origin } })
+        // session/token หมดอายุ (รวม refresh token หมดอายุ/ถูกเพิกถอน) — retry ซ้ำไม่มีทางสำเร็จ
+        // ต้องพากลับไป login ใหม่เท่านั้น แทนที่จะโชว์หน้า error ให้กด "ลองใหม่" วนไม่รู้จบ
+        if (isSessionExpiredError(err)) {
+          forceLogout()
           return
         }
-        setLoadError(message || 'โหลดข้อมูลไม่สำเร็จ')
+        setLoadError(err instanceof Error ? err.message : 'โหลดข้อมูลไม่สำเร็จ')
       }
     }
     load()
@@ -212,10 +234,16 @@ export default function App() {
   const withToken = () => getAccessTokenSilently()
 
   /** อัปโหลดรูป (data URL ที่ย่อแล้วจาก pickImageAsDataUrl) ไปเก็บเป็นไฟล์บน backend — คืน URL สั้นๆ
-   *  ไม่ห่อด้วย runAction เพราะหน้าที่เรียก (Menus/Settings/BookingHistory) จัดการ error เองแบบ inline ใกล้ปุ่มอัปโหลดอยู่แล้ว */
+   *  ไม่ห่อด้วย runAction เพราะหน้าที่เรียก (Menus/Settings/BookingHistory) จัดการ error เองแบบ inline ใกล้ปุ่มอัปโหลดอยู่แล้ว
+   *  แต่ session หมดอายุยังต้องเด้ง logout เหมือน action อื่นๆ ไม่งั้นค้างอยู่หน้าเดิมพร้อม error ที่กดยังไงก็ไม่ผ่าน */
   const handleUploadImage = async (kind: UploadKind, dataUrl: string): Promise<string> => {
-    const token = await withToken()
-    return api.uploadImage(token, kind, dataUrl)
+    try {
+      const token = await withToken()
+      return await api.uploadImage(token, kind, dataUrl)
+    } catch (err) {
+      if (isSessionExpiredError(err)) forceLogout()
+      throw err
+    }
   }
 
   /** โหลดรายการจองทีละหน้า — ใช้เฉพาะหน้า Orders (owner) และ ประวัติการจอง (customer) ไม่ใช่ bookings state หลัก
@@ -237,6 +265,12 @@ export default function App() {
       setActionError(null)
       await fn()
     } catch (err) {
+      // session/token หมดอายุระหว่างใช้งาน (เช่นเปิดแท็บค้างไว้นาน) — เด้งกลับหน้า login ทันที
+      // แทนที่จะโชว์ error banner เฉยๆ ซึ่งกด "ลองใหม่" ยังไงก็ไม่ผ่านจนกว่าจะ login ใหม่อยู่ดี
+      if (isSessionExpiredError(err)) {
+        forceLogout()
+        return
+      }
       setActionError(err instanceof Error ? err.message : 'ทำรายการไม่สำเร็จ ลองใหม่อีกครั้ง')
     }
   }
@@ -317,6 +351,10 @@ export default function App() {
       setPackages(reordered)
     } catch (err) {
       setPackages(prevPackages)
+      if (isSessionExpiredError(err)) {
+        forceLogout()
+        return
+      }
       setActionError(err instanceof Error ? err.message : 'ทำรายการไม่สำเร็จ ลองใหม่อีกครั้ง')
     }
   }
@@ -417,6 +455,7 @@ export default function App() {
         if (/-> 409/.test(message)) {
           const fresh = await api.settings(token)
           setSettings(fresh)
+          setSettingsConflictAt(Date.now())
           throw new Error('มีการแก้ไขค่าตั้งค่าจากที่อื่นไปแล้ว ระบบโหลดค่าล่าสุดมาให้แล้ว กรุณาตรวจสอบและบันทึกใหม่อีกครั้ง')
         }
         throw err
@@ -593,7 +632,12 @@ export default function App() {
           <Reports bookings={bookings} menus={menus} settings={settings} />
         )}
         {effectiveScreen === 'owner-settings' && (
-          <Settings settings={settings} onUpdateSettings={handleUpdateSettings} onUploadImage={handleUploadImage} />
+          <Settings
+            settings={settings}
+            onUpdateSettings={handleUpdateSettings}
+            onUploadImage={handleUploadImage}
+            conflictAt={settingsConflictAt}
+          />
         )}
       </OwnerLayout>
     )

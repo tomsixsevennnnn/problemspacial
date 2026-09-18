@@ -13,7 +13,8 @@ const makeService = () => {
   } as any
   const audit = { log: jest.fn() } as any
   const uploads = { deleteManagedFile: jest.fn() } as any
-  return { service: new MenusService(prisma, audit, uploads), prisma, audit, uploads }
+  const packages = { invalidate: jest.fn() } as any
+  return { service: new MenusService(prisma, audit, uploads, packages), prisma, audit, uploads, packages }
 }
 
 describe('MenusService.remove — soft delete (ข้อ 5)', () => {

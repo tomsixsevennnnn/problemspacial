@@ -108,18 +108,14 @@ export default function Orders({ bookings, menus, settings, onUpdateBooking, onF
     }
   }, [loadPage])
 
-  const filtered = pageData?.items ?? []
+  // เอา bookings (ชุดเต็มจาก App.tsx) มาทับแถวใน pageData ถ้ามี — onUpdateBooking ใน App.tsx ทำ optimistic update
+  // + rollback ให้ bookings ถูกต้องอยู่แล้ว (ดูคอมเมนต์ที่ handleUpdateBooking) เอามาสะท้อนใส่ตารางตรงนี้แทนที่จะ
+  // patch pageData เองแยกต่างหาก กันเคส API พังแล้วแถวในตารางค้างค่า optimistic ที่ผิดไว้ไม่มี rollback
+  const filtered = (pageData?.items ?? []).map(row => bookings.find(b => b.id === row.id) ?? row)
   const totalPages = pageData ? Math.max(1, Math.ceil(pageData.total / PAGE_SIZE)) : 1
-
-  /** สะท้อน patch เข้า pageData ทันที (ไม่ต้องรอ refetch) — pageData เป็นแหล่งข้อมูลหลักของแผงขวา (ดู `selected`
-   *  ด้านบน) ถ้าไม่ sync ตรงนี้ด้วย การแก้ไขจะไม่ขึ้นในแผงจนกว่าจะ poll/เปลี่ยนหน้ารอบถัดไป */
-  const patchPageRow = (id: string, patch: Partial<Booking>) => {
-    setPageData(pd => (pd ? { ...pd, items: pd.items.map(b => (b.id === id ? { ...b, ...patch } : b)) } : pd))
-  }
 
   const updateStatus = (id: string, status: Booking['status']) => {
     onUpdateBooking(id, { status })
-    patchPageRow(id, { status })
   }
 
   /* --- แผนกำลังคน ------------------------------------------------- */
@@ -152,7 +148,6 @@ export default function Orders({ bookings, menus, settings, onUpdateBooking, onF
       staffSavedAt: new Date().toISOString(),
     }
     onUpdateBooking(selected.id, patch)
-    patchPageRow(selected.id, patch)
   }
 
   return (

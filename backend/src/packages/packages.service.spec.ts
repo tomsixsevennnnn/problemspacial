@@ -21,8 +21,14 @@ const makeService = () => {
       findMany: jest.fn(),
       count: jest.fn(),
     },
-    packageCourse: { deleteMany: jest.fn() },
+    packageCourse: {
+      deleteMany: jest.fn(),
+      createManyAndReturn: jest
+        .fn()
+        .mockImplementation(({ data }: any) => Promise.resolve(data.map((c: any, i: number) => ({ ...c, id: `new_c${i}` })))),
+    },
     $transaction: jest.fn(),
+    $executeRaw: jest.fn(),
   } as any
   const audit = { log: jest.fn() } as any
   return { service: new PackagesService(prisma, audit), prisma, audit }
@@ -99,7 +105,7 @@ describe('PackagesService.update — ข้าม delete+recreate ถ้า cour
     const { service, prisma } = makeService()
     prisma.package.findUnique.mockResolvedValue({ ...EXISTING, courses: PKG_COURSES })
     prisma.$transaction.mockImplementation((fn: any) =>
-      fn({ packageCourse: prisma.packageCourse, package: prisma.package }),
+      fn({ packageCourse: prisma.packageCourse, package: prisma.package, $executeRaw: prisma.$executeRaw }),
     )
 
     const changedInput = [...SAME_COURSE_INPUT, { no: 3, title: 'ของหวาน', category: 'dessert', choose: 0, itemIds: [] }]
@@ -112,7 +118,7 @@ describe('PackagesService.update — ข้าม delete+recreate ถ้า cour
     const { service, prisma } = makeService()
     prisma.package.findUnique.mockResolvedValue({ ...EXISTING, courses: PKG_COURSES })
     prisma.$transaction.mockImplementation((fn: any) =>
-      fn({ packageCourse: prisma.packageCourse, package: prisma.package }),
+      fn({ packageCourse: prisma.packageCourse, package: prisma.package, $executeRaw: prisma.$executeRaw }),
     )
 
     const changedInput = SAME_COURSE_INPUT.map((c, i) => (i === 0 ? { ...c, itemIds: ['item1'] } : c))

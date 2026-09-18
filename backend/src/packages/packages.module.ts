@@ -7,5 +7,6 @@ import { PackagesService } from './packages.service'
   imports: [AuditModule],
   controllers: [PackagesController],
   providers: [PackagesService],
+  exports: [PackagesService],
 })
 export class PackagesModule {}
