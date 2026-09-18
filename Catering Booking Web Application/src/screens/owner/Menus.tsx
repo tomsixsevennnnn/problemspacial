@@ -25,7 +25,7 @@ interface MenusProps {
   packages: Package[]
   settings: AppSettings
   onSaveMenu: (item: MenuItem) => void
-  onDeleteMenu: (id: string) => void
+  onDeleteMenu: (id: string) => Promise<void>
   onUploadImage: (kind: UploadKind, dataUrl: string) => Promise<string>
 }
 
@@ -62,6 +62,7 @@ export default function Menus({ menus, packages, settings, onSaveMenu, onDeleteM
   const [editing, setEditing] = useState<MenuItem | null>(null)
   const [form, setForm] = useState<MenuForm>(emptyForm(categories[0].id))
   const [confirmDelete, setConfirmDelete] = useState<MenuItem | null>(null)
+  const [deleting, setDeleting] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [imageError, setImageError] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -547,18 +548,26 @@ export default function Menus({ menus, packages, settings, onSaveMenu, onDeleteM
             <div className="flex gap-3 mt-6">
               <button
                 onClick={() => setConfirmDelete(null)}
-                className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl py-3 font-semibold text-sm transition-colors"
+                disabled={deleting}
+                className="flex-1 bg-gray-100 hover:bg-gray-200 disabled:opacity-50 text-gray-700 rounded-xl py-3 font-semibold text-sm transition-colors"
               >
                 ยกเลิก
               </button>
               <button
-                onClick={() => {
-                  onDeleteMenu(confirmDelete.id)
+                onClick={async () => {
+                  setDeleting(true)
+                  try {
+                    await onDeleteMenu(confirmDelete.id)
+                  } finally {
+                    setDeleting(false)
+                  }
                   setConfirmDelete(null)
                 }}
-                className="flex-1 bg-red-500 hover:bg-red-600 text-white rounded-xl py-3 font-semibold text-sm transition-colors"
+                disabled={deleting}
+                className="flex-1 flex items-center justify-center gap-2 bg-red-500 hover:bg-red-600 disabled:bg-red-300 text-white rounded-xl py-3 font-semibold text-sm transition-colors"
               >
-                ลบเมนู
+                {deleting && <Loader2 size={14} className="animate-spin" />}
+                {deleting ? 'กำลังลบ...' : 'ลบเมนู'}
               </button>
             </div>
           </div>

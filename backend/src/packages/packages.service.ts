@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common'
-import type { Package, PackageCourse, MenuItem } from '@prisma/client'
+import { Prisma, type Package, type PackageCourse, type MenuItem } from '@prisma/client'
 import { AuditService } from '../audit/audit.service'
 import { PrismaService } from '../prisma/prisma.service'
 import { CourseInput, CreatePackageDto } from './dto/create-package.dto'
@@ -143,11 +143,35 @@ export class PackagesService {
     }
 
     // courses เปลี่ยนจริง — แทนที่ทุกข้อทั้งชุด (ลบของเดิมแล้วสร้างใหม่ในทรานแซกชันเดียว)
-    // nested create หลายข้อ × connect หลายเมนู/ข้อ กลายเป็นหลาย round trip ต่อเนื่องกัน — ค่า timeout เริ่มต้นของ
-    // Prisma (5000ms) ไม่พอเมื่อ DB อยู่ไกล (เช่น dev เครื่องนี้ชี้ไป Railway ผ่าน public proxy) เลยยืดให้พอ
+    // เดิมใช้ nested create หลายข้อ × connect หลายเมนู/ข้อ ทำให้ Prisma ยิงหลาย round trip ต่อเนื่องกัน (1 ต่อข้อ
+    // + 1 ต่อเมนูที่ connect) แทนที่ด้วย createManyAndReturn (1 round trip สร้างทุกข้อ) แล้วต่อด้วย raw insert
+    // ลง join table ของความสัมพันธ์ items (implicit m2m "CourseItems" → ตาราง _CourseItems คอลัมน์ A=MenuItem.id,
+    // B=PackageCourse.id ตาม schema.prisma) ครั้งเดียวจบไม่ว่าจะมีกี่ข้อกี่เมนู เหลือ round trip คงที่ไม่ผันตาม
+    // จำนวนข้อ/เมนูอีกต่อไป — ยังคงยืด timeout ไว้เผื่อ DB อยู่ไกล (Railway ผ่าน public proxy)
     return this.prisma.$transaction(
       async (tx) => {
         await tx.packageCourse.deleteMany({ where: { packageId: id } })
+
+        const createdCourses = await tx.packageCourse.createManyAndReturn({
+          data: dto.courses!.map((c) => ({
+            packageId: id,
+            no: c.no,
+            title: c.title,
+            icon: c.icon,
+            category: c.category,
+            choose: c.choose,
+          })),
+        })
+        const courseIdByNo = new Map(createdCourses.map((c) => [c.no, c.id]))
+
+        const joinRows = dto.courses!.flatMap((c) => {
+          const courseId = courseIdByNo.get(c.no)!
+          return c.itemIds.map((itemId) => Prisma.sql`(${itemId}, ${courseId})`)
+        })
+        if (joinRows.length > 0) {
+          await tx.$executeRaw`INSERT INTO "_CourseItems" ("A", "B") VALUES ${Prisma.join(joinRows)}`
+        }
+
         return tx.package.update({
           where: { id },
           data: {
@@ -157,18 +181,8 @@ export class PackagesService {
             description: dto.description,
             features: dto.features,
             badge: dto.badge,
-            courses: {
-              create: dto.courses!.map((c) => ({
-                no: c.no,
-                title: c.title,
-                icon: c.icon,
-                category: c.category,
-                choose: c.choose,
-                items: { connect: c.itemIds.map((itemId) => ({ id: itemId })) },
-              })),
-            },
           },
-          include: { courses: { include: { items: true } } },
+          include: { courses: { include: { items: true }, orderBy: { no: 'asc' } } },
         })
       },
       { timeout: 20_000 },

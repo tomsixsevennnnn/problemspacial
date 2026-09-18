@@ -18,12 +18,12 @@ interface LocationMapProps {
 type LayerKind = 'street' | 'satellite'
 
 const LAYER_OPTIONS: { key: LayerKind; label: string }[] = [
-  { key: 'street', label: 'ถนน' },
-  { key: 'satellite', label: 'ภาพดาวเทียม' },
+  { key: 'street', label: 'แผนที่' },
+  { key: 'satellite', label: 'ดาวเทียม' },
 ]
 
 /** แหล่ง tile ของแต่ละรูปแบบแผนที่ — ทุกแหล่งใช้ได้ฟรีโดยไม่ต้องมี API key */
-const LAYER_SOURCES: Record<LayerKind, { url: string; attribution: string; maxZoom: number }> = {
+const TILE_LAYERS: Record<LayerKind, { url: string; attribution: string; maxZoom: number }> = {
   street: {
     url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
     attribution: '&copy; OpenStreetMap',
@@ -67,9 +67,7 @@ export default function LocationMap({
   const containerRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<L.Map | null>(null)
   const markerRef = useRef<L.Marker | null>(null)
-  const tileLayerRef = useRef<L.TileLayer | null>(null)
   const [layer, setLayer] = useState<LayerKind>('street')
-  const [layerMenuOpen, setLayerMenuOpen] = useState(false)
   // เก็บ callback ล่าสุดไว้ใน ref เพื่อไม่ต้องสร้างแผนที่ใหม่ทุกครั้งที่ parent re-render
   const onPinChangeRef = useRef(onPinChange)
   onPinChangeRef.current = onPinChange
@@ -86,12 +84,6 @@ export default function LocationMap({
       touchZoom: interactive,
       keyboard: interactive,
     }).setView([position.lat, position.lng], 16)
-
-    const initial = LAYER_SOURCES.street
-    tileLayerRef.current = L.tileLayer(initial.url, {
-      maxZoom: initial.maxZoom,
-      attribution: initial.attribution,
-    }).addTo(map)
 
     const marker = L.marker([position.lat, position.lng], {
       draggable: interactive,
@@ -134,16 +126,19 @@ export default function LocationMap({
     markerRef.current?.setLatLng([position.lat, position.lng])
   }, [position.lat, position.lng])
 
-  // สลับรูปแบบแผนที่ (ถนน / ดาวเทียม / ภูมิประเทศ) — ถอด tile layer เก่าแล้วใส่อันใหม่แทน
+  // สลับชั้นแผนที่ถนน/ดาวเทียม — ใส่/ถอด tile layer ใหม่ทุกครั้งที่ layer เปลี่ยน
   useEffect(() => {
     const map = mapRef.current
     if (!map) return
-    const source = LAYER_SOURCES[layer]
-    if (tileLayerRef.current) map.removeLayer(tileLayerRef.current)
-    tileLayerRef.current = L.tileLayer(source.url, {
-      maxZoom: source.maxZoom,
-      attribution: source.attribution,
-    }).addTo(map)
+    const cfg = TILE_LAYERS[layer]
+    const tile = L.tileLayer(cfg.url, { maxZoom: cfg.maxZoom, attribution: cfg.attribution }).addTo(map)
+    return () => {
+      try {
+        map.removeLayer(tile)
+      } catch {
+        // แผนที่ถูก destroy ไปแล้วตอน unmount (map.remove() ในเอฟเฟกต์ mount ด้านบน) — ไม่ต้องทำอะไรต่อ
+      }
+    }
   }, [layer])
 
   // บินไปยังตำแหน่งใหม่เมื่อ focusKey เปลี่ยน (ค้นหา / GPS / เลือกสถานที่ยอดนิยม)
@@ -162,36 +157,13 @@ export default function LocationMap({
 
       {interactive && (
         <>
-          <div className="absolute bottom-3 right-3 z-[1000]">
-            {layerMenuOpen && (
-              <div className="absolute bottom-11 right-0 bg-white rounded-xl shadow-xl border border-gray-100 overflow-hidden w-36">
-                {LAYER_OPTIONS.map(opt => (
-                  <button
-                    key={opt.key}
-                    onClick={() => {
-                      setLayer(opt.key)
-                      setLayerMenuOpen(false)
-                    }}
-                    className={`w-full text-left px-3.5 py-2.5 text-xs font-medium transition-colors ${
-                      layer === opt.key ? 'bg-orange-50 text-orange-600' : 'text-gray-700 hover:bg-gray-50'
-                    }`}
-                  >
-                    {opt.label}
-                  </button>
-                ))}
-              </div>
-            )}
-
-            <button
-              onClick={() => setLayerMenuOpen(o => !o)}
-              aria-label="เลือกรูปแบบแผนที่"
-              className={`w-9 h-9 rounded-xl shadow-md flex items-center justify-center transition-colors ${
-                layerMenuOpen ? 'bg-orange-500 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'
-              }`}
-            >
-              <Layers size={16} />
-            </button>
-          </div>
+          <button
+            onClick={() => setLayer(l => (l === 'street' ? 'satellite' : 'street'))}
+            className="absolute top-3 left-3 z-[1000] bg-white rounded-lg shadow-md flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+          >
+            <Layers size={14} />
+            {layer === 'street' ? LAYER_OPTIONS[1].label : LAYER_OPTIONS[0].label}
+          </button>
 
           <div className="absolute top-3 right-3 flex flex-col gap-2 z-[1000]">
             <button

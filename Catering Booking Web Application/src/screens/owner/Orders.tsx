@@ -288,21 +288,29 @@ export default function Orders({ bookings, menus, settings, onUpdateBooking, onF
 
             <div className="flex-1 overflow-y-auto p-5">
             <div className="max-w-2xl mx-auto space-y-5">
-              {/* Customer info */}
+              {/* Customer info — .customer.* มาจาก join ที่ bookings ชุดเต็มเท่านั้น (ดูคอมเมนต์ที่ `selected`
+                  ด้านบน) รายการจองใหม่ที่ยังไม่ทันซิงก์เข้า bookings จะไม่มี .customer ชั่วคราว — fallback ไป
+                  แยกชื่อ/นามสกุลจาก customerName ที่ snapshot ไว้ในทุกใบจองอยู่แล้ว (กรอกตอน complete profile
+                  ครั้งแรก) กันไม่ให้ช่อง ชื่อ/นามสกุล ว่างเปล่าไปเฉยๆ ระหว่างรอ poll — อีเมลไม่มี snapshot ให้ใช้
+                  (backend ไม่เคยเก็บอีเมล ณ ตอนจองไว้) เลยว่างชั่วคราวได้ในเคสนี้เท่านั้น จนกว่าจะซิงก์ */}
               <div>
                 <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">ข้อมูลลูกค้า</p>
                 <div className="space-y-2.5">
-                  {[
-                    { label: 'ชื่อ', value: selected.customer?.name || '—' },
-                    { label: 'นามสกุล', value: selected.customer?.surname || '—' },
-                    { label: 'อีเมล', value: selected.customer?.email || '—' },
-                    { label: 'Line ID', value: selected.customer?.lineId || selected.lineId || '—' },
-                    { label: 'เบอร์โทร', value: selected.phone },
-                    { label: 'วันที่', value: new Date(selected.date + 'T00:00:00').toLocaleDateString('th-TH', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' }) },
-                    { label: 'ช่วงเวลา', value: selected.timeSlot },
-                    { label: 'จำนวนโต๊ะ', value: `${selected.tables} โต๊ะ` },
-                    { label: 'แพ็กเกจ', value: selected.packageName },
-                  ].map(({ label, value }) => (
+                  {(() => {
+                    const [fallbackName, ...fallbackSurnameParts] = selected.customerName.trim().split(/\s+/)
+                    const fallbackSurname = fallbackSurnameParts.join(' ')
+                    return [
+                      { label: 'ชื่อ', value: selected.customer?.name || fallbackName || '—' },
+                      { label: 'นามสกุล', value: selected.customer?.surname || fallbackSurname || '—' },
+                      { label: 'อีเมล', value: selected.customer?.email || '—' },
+                      { label: 'Line ID', value: selected.customer?.lineId || selected.lineId || '—' },
+                      { label: 'เบอร์โทร', value: selected.phone },
+                      { label: 'วันที่', value: new Date(selected.date + 'T00:00:00').toLocaleDateString('th-TH', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' }) },
+                      { label: 'ช่วงเวลา', value: selected.timeSlot },
+                      { label: 'จำนวนโต๊ะ', value: `${selected.tables} โต๊ะ` },
+                      { label: 'แพ็กเกจ', value: selected.packageName },
+                    ]
+                  })().map(({ label, value }) => (
                     <div key={label} className="flex justify-between text-sm">
                       <span className="text-gray-400">{label}</span>
                       <span className="font-medium text-gray-800">{value}</span>
