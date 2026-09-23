@@ -218,8 +218,8 @@ export default function OwnerLayout({
                           className="w-full text-left px-4 py-3 hover:bg-orange-50/60 transition-colors"
                         >
                           <p className="text-sm font-semibold text-gray-900">{notif.title}</p>
-                          <p className="text-sm text-gray-500 mt-0.5 leading-relaxed">{notif.message}</p>
-                          <p className="text-xs text-gray-400 mt-1">{formatRelativeTime(notif.timestamp)}</p>
+                          <p className="text-xs text-gray-500 mt-0.5 leading-relaxed">{notif.message}</p>
+                          <p className="text-[11px] text-gray-400 mt-1">{formatRelativeTime(notif.timestamp)}</p>
                         </button>
                       ))}
                     </div>
@@ -227,7 +227,7 @@ export default function OwnerLayout({
 
                   <button
                     onClick={() => handleNavigate('owner-orders')}
-                    className="w-full text-center py-3 text-sm font-medium text-orange-600 hover:bg-orange-50 transition-colors border-t border-gray-100"
+                    className="w-full text-center text-xs font-medium text-orange-600 hover:bg-orange-50 transition-colors py-2.5 border-t border-gray-100"
                   >
                     ดูรายการจองทั้งหมด
                   </button>
