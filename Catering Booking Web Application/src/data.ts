@@ -32,6 +32,7 @@ export const orderedCategories = (order: string[]): Category[] => {
 /** ข้อที่ลูกค้าต้องเลือกเอง (choose > 0) */
 export const requiredCourses = (pkg: Package) => pkg.courses.filter(c => c.choose > 0)
 
-/** ข้อที่รวมมาให้ในแพ็กเกจแล้ว (choose === 0) */
+/** ข้อที่รวมมาให้ในแพ็กเกจแล้ว (choose === 0) — เอาเฉพาะเมนูที่เจ้าของร้านยังเปิดใช้งานอยู่ (active !== false)
+ *  กันเมนูที่ปิดไปแล้วถูกยัดใส่ใบจองอัตโนมัติทั้งที่ลูกค้าไม่เห็น/เลือกไม่ได้แล้ว */
 export const includedItems = (pkg: Package) =>
-  pkg.courses.filter(c => c.choose === 0).flatMap(c => c.items)
+  pkg.courses.filter(c => c.choose === 0).flatMap(c => c.items).filter(i => i.active !== false)
