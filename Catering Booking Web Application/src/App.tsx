@@ -20,6 +20,7 @@ import {
 import { roleFromAuth0User, type AppRole } from './auth'
 import { isSessionExpiredError } from './sessionExpired'
 import { DEFAULT_UNREAD_WINDOW_MS, unreadNotificationCount } from './notifications'
+import type { NotificationItem } from './notifications'
 import { api, type BackendUser, type CreatePackageInput, type UpdatePackageInput, type UploadKind } from './api'
 import ErrorBanner from './components/ErrorBanner'
 import Login from './screens/Login'
@@ -127,6 +128,9 @@ export default function App() {
   // ค่า notifSeenAt "ก่อนหน้า" ที่ freeze ไว้ตอนเข้าหน้าแจ้งเตือนรอบนี้ — ใช้ตัดสินป้าย "ยังไม่อ่าน" รายรายการ
   // ในหน้านั้นเอง (โชว์สิ่งที่ใหม่ตั้งแต่ครั้งก่อนที่เปิดดู) แยกจาก notifSeenAt ที่อัปเดตทันทีเพื่อให้ตัวเลขที่กระดิ่งหายทันที
   const [notifPageSeenAt, setNotifPageSeenAt] = useState(notifSeenAt)
+  // ใบจองที่ต้องเปิดทันทีหลังคลิกรายการแจ้งเตือน — ส่งต่อให้ Orders (owner) / BookingHistory (customer) เปิดให้เอง
+  // แล้วเคลียร์กลับเป็น null ทันทีที่เปิดสำเร็จ (ดู useEffect ในหน้านั้นๆ) กันเปิดซ้ำเวลากลับมาหน้าเดิมอีกครั้ง
+  const [pendingNotifBookingId, setPendingNotifBookingId] = useState<string | null>(null)
 
   /** ตั้งชื่อแท็บเบราว์เซอร์ให้ไวที่สุดตั้งแต่แอป mount — ใช้ endpoint สาธารณะ ไม่ต้องรอ login/โหลดข้อมูลครบชุดเหมือน settings ปกติ */
   useEffect(() => {
@@ -403,6 +407,13 @@ export default function App() {
     setScreen(s)
   }
 
+  /** คลิกรายการแจ้งเตือน (ดรอปดาวน์ของ owner หรือหน้าแจ้งเตือนเต็มของลูกค้า) — พาไปหน้ารายการจอง/ประวัติการจอง
+   *  พร้อมเปิดใบจองต้นทางให้ทันที แทนที่จะแค่พาไปหน้ารวมเฉยๆ */
+  const handleNotificationClick = (notif: NotificationItem) => {
+    setPendingNotifBookingId(notif.bookingId)
+    navigate(role === 'owner' ? 'owner-orders' : 'history')
+  }
+
   /** หลัง login สำเร็จ (และกรอกโปรไฟล์ครบถ้าเป็นลูกค้า) พาไปหน้าเริ่มต้นตาม role ทันที */
   const effectiveScreen: Screen =
     screen === 'login' && isAuthenticated && !needsProfile
@@ -587,6 +598,7 @@ export default function App() {
         user={user}
         bookings={bookings}
         shopName={settings.shopInfo.name}
+        onNotificationClick={handleNotificationClick}
       >
         {actionError && <ErrorBanner message={actionError} onDismiss={() => setActionError(null)} />}
         {effectiveScreen === 'owner-dashboard' && (
@@ -599,6 +611,8 @@ export default function App() {
             settings={settings}
             onUpdateBooking={handleUpdateBooking}
             onFetchBookingsPage={handleFetchBookingsPage}
+            openBookingId={pendingNotifBookingId}
+            onOpenBookingIdHandled={() => setPendingNotifBookingId(null)}
           />
         )}
         {effectiveScreen === 'owner-calendar' && (
@@ -747,6 +761,8 @@ export default function App() {
           onUpdateBooking={handleUpdateBooking}
           onUploadImage={handleUploadImage}
           settings={settings}
+          openBookingId={pendingNotifBookingId}
+          onOpenBookingIdHandled={() => setPendingNotifBookingId(null)}
         />
       )}
       {effectiveScreen === 'notifications' && (
@@ -757,6 +773,7 @@ export default function App() {
           bookings={bookings}
           shopName={settings.shopInfo.name}
           notifSeenAt={notifPageSeenAt}
+          onNotificationClick={handleNotificationClick}
         />
       )}
     </>

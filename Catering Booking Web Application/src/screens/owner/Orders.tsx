@@ -34,11 +34,22 @@ interface OrdersProps {
   bookings: Booking[]
   menus: MenuItem[]
   settings: AppSettings
-  onUpdateBooking: (id: string, patch: Partial<Booking>) => void
+  onUpdateBooking: (id: string, patch: Partial<Booking>) => Promise<void>
   onFetchBookingsPage: (page: number, pageSize: number, search: string) => Promise<BookingsPage>
+  /** ใบจองที่ต้องเปิดทันทีตอนเข้าหน้านี้ — มาจากการคลิกรายการแจ้งเตือน */
+  openBookingId?: string | null
+  onOpenBookingIdHandled?: () => void
 }
 
-export default function Orders({ bookings, menus, settings, onUpdateBooking, onFetchBookingsPage }: OrdersProps) {
+export default function Orders({
+  bookings,
+  menus,
+  settings,
+  onUpdateBooking,
+  onFetchBookingsPage,
+  openBookingId,
+  onOpenBookingIdHandled,
+}: OrdersProps) {
   const [search, setSearch] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
   const [page, setPage] = useState(1)
@@ -49,6 +60,8 @@ export default function Orders({ bookings, menus, settings, onUpdateBooking, onF
   const [staffDraft, setStaffDraft] = useState<StaffPlan | null>(null)
   const [noteDraft, setNoteDraft] = useState('')
   const [slipZoom, setSlipZoom] = useState<string | null>(null)
+  const [showCancelConfirm, setShowCancelConfirm] = useState(false)
+  const [cancelling, setCancelling] = useState(false)
 
   // หาใน bookings (ชุดเต็ม) ก่อนเสมอ — เฉพาะ endpoint นี้เท่านั้นที่ join .customer.* (ชื่อ/นามสกุล/อีเมลจริงจาก
   // User) มาด้วย ส่วน pageData (จากตาราง paginate) ไม่มี .customer เลยโดยตั้งใจ (ดูคอมเมนต์ที่ backend
@@ -127,7 +140,20 @@ export default function Orders({ bookings, menus, settings, onUpdateBooking, onF
     setSelectedId(booking.id)
     setStaffDraft(booking.staffActual ?? toPlan(calculateStaff(booking.tables)))
     setNoteDraft(booking.staffNote ?? '')
+    setShowCancelConfirm(false)
+    setCancelling(false)
   }
+
+  // มาจากคลิกรายการแจ้งเตือน — เปิดใบจองนั้นทันทีที่เจอใน bookings (ชุดเต็ม) แล้วเคลียร์สัญญาณกันเปิดซ้ำ
+  useEffect(() => {
+    if (!openBookingId) return
+    const target = bookings.find(b => b.id === openBookingId)
+    if (target) {
+      openBooking(target)
+      onOpenBookingIdHandled?.()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openBookingId, bookings])
 
   const adjustStaff = (key: keyof StaffPlan, delta: number) => {
     setStaffDraft(prev => (prev ? { ...prev, [key]: Math.max(0, prev[key] + delta) } : prev))
@@ -556,45 +582,89 @@ export default function Orders({ bookings, menus, settings, onUpdateBooking, onF
 
             {/* Status buttons */}
             <div className="p-5 border-t border-gray-100">
-              <div className="max-w-2xl mx-auto space-y-2">
+            <div className="max-w-2xl mx-auto space-y-2">
               <p className="text-xs font-semibold text-gray-400 mb-3">อัปเดตสถานะ</p>
-              <div className="grid grid-cols-3 gap-2">
-                {(['pending', 'confirmed', 'completed'] as const).map(s => {
-                  const sc = STATUS_CONFIG[s]
-                  const isActive = selected.status === s
+              {selected.status === 'cancelled' ? (
+                <div className="flex items-center gap-2 bg-red-50 border border-red-100 text-red-600 rounded-xl px-3 py-2.5 text-sm font-medium">
+                  <X size={14} />
+                  การจองนี้ถูกยกเลิกแล้ว
+                </div>
+              ) : (
+                <>
+                  <div className="grid grid-cols-3 gap-2">
+                    {(['pending', 'confirmed', 'completed'] as const).map(s => {
+                      const sc = STATUS_CONFIG[s]
+                      const isActive = selected.status === s
+                      return (
+                        <button
+                          key={s}
+                          onClick={() => updateStatus(selected.id, s)}
+                          className={`flex items-center justify-center gap-1 py-2.5 rounded-xl text-xs font-semibold transition-all ${
+                            isActive ? `${sc.bg} ${sc.text} border-2 ${s === 'confirmed' ? 'border-green-300' : 'border-yellow-300'}` : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                          }`}
+                        >
+                          {isActive && <Check size={12} />}
+                          {sc.label}
+                        </button>
+                      )
+                    })}
+                  </div>
 
-                  return (
-                    <button
-                      key={s}
-                      onClick={() => updateStatus(selected.id, s)}
-                      className={`flex items-center justify-center gap-1 py-2.5 rounded-xl text-xs font-semibold transition-all ${
-                        isActive ? `${sc.bg} ${sc.text} border-2 ${s === 'confirmed' ? 'border-green-300' : 'border-yellow-300'}` : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
-                      }`}
-                    >
-                      {isActive && <Check size={12} />}
-                      {sc.label}
-                    </button>
-                  )
-                })}
-              </div>
-
-              {/* ยกเลิก — แยกออกมาต่างหากและเน้นสีแดงเสมอ กันกดพลาดปนกับสถานะปกติ */}
-              <button
-                onClick={() => updateStatus(selected.id, 'cancelled')}
-                className={`w-full flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-xs font-semibold transition-all ${
-                  selected.status === 'cancelled'
-                    ? 'bg-red-600 text-white border-2 border-red-700'
-                    : 'bg-red-50 text-red-600 border border-red-200 hover:bg-red-100'
-                }`}
-              >
-                {selected.status === 'cancelled' && <Check size={12} />}
-                ยกเลิกการจอง
-              </button>
-              </div>
+                  {/* ยกเลิก — แยกออกมาต่างหากและเน้นสีแดงเสมอ กันกดพลาดปนกับสถานะปกติ ต้องยืนยันอีกครั้งก่อนตัดจริง */}
+                  <button
+                    onClick={() => setShowCancelConfirm(true)}
+                    className="w-full flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-xs font-semibold text-red-600 bg-red-50 hover:bg-red-100 border border-red-100 transition-colors"
+                  >
+                    <X size={12} />
+                    ยกเลิกการจอง
+                  </button>
+                </>
+              )}
+            </div>
             </div>
           </div>
         )}
       </div>
+
+      {/* ยืนยันก่อนยกเลิกการจอง — แก้กลับไม่ได้ง่ายๆ ผ่านปุ่มนี้ ต้องระวังเพราะกระทบลูกค้าโดยตรง */}
+      {showCancelConfirm && selected && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm overflow-hidden">
+            <div className="p-6">
+              <h3 className="text-lg font-bold text-gray-900 mb-1.5">ยกเลิกการจองนี้?</h3>
+              <p className="text-sm text-gray-500 mb-6">
+                การจองหมายเลข {docNumber(selected, 'booking')} ของ {selected.customerName} จะถูกยกเลิก
+                ลูกค้าจะเห็นสถานะ "ยกเลิก" ทันที
+              </p>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setShowCancelConfirm(false)}
+                  disabled={cancelling}
+                  className="flex-1 bg-gray-100 hover:bg-gray-200 disabled:opacity-50 text-gray-700 rounded-2xl py-3 font-semibold text-sm transition-colors"
+                >
+                  ไม่ยกเลิก
+                </button>
+                <button
+                  onClick={async () => {
+                    setCancelling(true)
+                    try {
+                      await onUpdateBooking(selected.id, { status: 'cancelled' })
+                    } finally {
+                      setCancelling(false)
+                    }
+                    setShowCancelConfirm(false)
+                  }}
+                  disabled={cancelling}
+                  className="flex-1 flex items-center justify-center gap-2 bg-red-500 hover:bg-red-600 disabled:bg-red-300 text-white rounded-2xl py-3 font-semibold text-sm transition-colors"
+                >
+                  {cancelling && <Loader2 size={14} className="animate-spin" />}
+                  {cancelling ? 'กำลังยกเลิก...' : 'ยืนยันยกเลิก'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Lightbox ดูสลิปแบบเต็มขนาด */}
       {slipZoom && (

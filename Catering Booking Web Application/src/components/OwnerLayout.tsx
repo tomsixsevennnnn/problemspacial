@@ -16,6 +16,7 @@ import {
   X,
 } from 'lucide-react'
 import { buildNotifications, formatRelativeTime } from '../notifications'
+import type { NotificationItem } from '../notifications'
 import type { Booking, Screen, UserProfile } from '../types'
 import type { ReactNode } from 'react'
 import Avatar from './Avatar'
@@ -27,6 +28,8 @@ interface OwnerLayoutProps {
   bookings: Booking[]
   shopName: string
   children: ReactNode
+  /** คลิกรายการในดรอปดาวน์แจ้งเตือน — พาไปเปิดใบจองของรายการนั้นที่หน้ารายการจอง */
+  onNotificationClick: (notif: NotificationItem) => void
 }
 
 /** เวลาที่เจ้าของร้านเปิดดูแจ้งเตือนล่าสุด — เก็บไว้เพื่อให้ตัวเลขที่กระดิ่งหายไปหลังจากเปิดดูแล้ว และไม่นับซ้ำเมื่อโหลดหน้าใหม่ */
@@ -43,7 +46,15 @@ const sidebarItems = [
   { label: 'ตั้งค่า', screen: 'owner-settings' as Screen, icon: Settings },
 ]
 
-export default function OwnerLayout({ navigate, currentScreen, user, bookings, shopName, children }: OwnerLayoutProps) {
+export default function OwnerLayout({
+  navigate,
+  currentScreen,
+  user,
+  bookings,
+  shopName,
+  children,
+  onNotificationClick,
+}: OwnerLayoutProps) {
   // ต่ำกว่า lg (จอแท็บเล็ตแนวตั้งอย่าง iPad) sidebar ซ่อนเป็น off-canvas drawer เปิดผ่านปุ่มแฮมเบอร์เกอร์
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [notifOpen, setNotifOpen] = useState(false)
@@ -198,11 +209,18 @@ export default function OwnerLayout({ navigate, currentScreen, user, bookings, s
                   ) : (
                     <div className="max-h-80 overflow-y-auto divide-y divide-gray-50">
                       {notifications.map((notif) => (
-                        <div key={notif.id} className="px-4 py-3">
+                        <button
+                          key={notif.id}
+                          onClick={() => {
+                            setNotifOpen(false)
+                            onNotificationClick(notif)
+                          }}
+                          className="w-full text-left px-4 py-3 hover:bg-orange-50/60 transition-colors"
+                        >
                           <p className="text-sm font-semibold text-gray-900">{notif.title}</p>
                           <p className="text-sm text-gray-500 mt-0.5 leading-relaxed">{notif.message}</p>
                           <p className="text-xs text-gray-400 mt-1">{formatRelativeTime(notif.timestamp)}</p>
-                        </div>
+                        </button>
                       ))}
                     </div>
                   )}

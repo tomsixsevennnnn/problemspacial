@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Calendar, Check, Eye, FileText, Filter, Loader2, Printer, Search, Send, Upload, X } from 'lucide-react'
 import Navbar from '../components/Navbar'
 import BookingDocument from '../components/BookingDocument'
@@ -15,6 +15,9 @@ interface BookingHistoryProps {
   onUpdateBooking: (id: string, patch: Partial<Booking>) => void
   onUploadImage: (kind: UploadKind, dataUrl: string) => Promise<string>
   settings: AppSettings
+  /** ใบจองที่ต้องเปิดทันทีตอนเข้าหน้านี้ — มาจากการคลิกรายการแจ้งเตือน */
+  openBookingId?: string | null
+  onOpenBookingIdHandled?: () => void
 }
 
 const STATUS_CONFIG = {
@@ -32,6 +35,8 @@ export default function BookingHistory({
   onUpdateBooking,
   onUploadImage,
   settings,
+  openBookingId,
+  onOpenBookingIdHandled,
 }: BookingHistoryProps) {
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('all')
@@ -59,6 +64,17 @@ export default function BookingHistory({
     setSlipError(null)
     setSlipSent(false)
   }
+
+  // มาจากคลิกรายการแจ้งเตือน — เปิดรายละเอียดใบจองนั้นทันทีที่เจอ แล้วเคลียร์สัญญาณกันเปิดซ้ำ
+  useEffect(() => {
+    if (!openBookingId) return
+    const target = bookings.find(b => b.id === openBookingId)
+    if (target) {
+      openDetail(target.id)
+      onOpenBookingIdHandled?.()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openBookingId, bookings])
 
   /** เลือกรูปสลิป — ย่อขนาดแล้วพักไว้เป็นตัวอย่าง ยังไม่บันทึกจนกว่าจะกด "ส่ง" */
   const handlePickSlip = async (bookingId: string, file: File | undefined) => {

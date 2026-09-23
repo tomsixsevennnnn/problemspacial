@@ -5,6 +5,8 @@ export type NotificationKind = 'pending' | 'confirmed' | 'completed' | 'cancelle
 
 export interface NotificationItem {
   id: string
+  /** ใบจองต้นทาง — ใช้พาไปเปิดรายละเอียดใบจองนั้นตรงๆ เมื่อคลิกรายการแจ้งเตือน */
+  bookingId: string
   kind: NotificationKind
   title: string
   message: string
@@ -41,6 +43,7 @@ export const buildNotifications = (bookings: Booking[]): NotificationItem[] => {
     if (booking.status === 'pending') {
       items.push({
         id: `${booking.id}-pending`,
+        bookingId: booking.id,
         kind: 'pending',
         title: 'รอการยืนยัน',
         message: `การจองหมายเลข ${no} กำลังรอการชำระเงินจาก ${booking.customerName} และยืนยันจากทีมงาน วันที่ ${booking.date} ${booking.timeSlot}`,
@@ -49,6 +52,7 @@ export const buildNotifications = (bookings: Booking[]): NotificationItem[] => {
     } else if (booking.status === 'confirmed') {
       items.push({
         id: `${booking.id}-confirmed`,
+        bookingId: booking.id,
         kind: 'confirmed',
         title: 'ยืนยันการจองแล้ว',
         message: `การจองหมายเลข ${no} ได้รับการยืนยัน วันที่ ${booking.date} ${booking.timeSlot}`,
@@ -57,6 +61,7 @@ export const buildNotifications = (bookings: Booking[]): NotificationItem[] => {
       if (booking.date === tomorrowKey) {
         items.push({
           id: `${booking.id}-reminder`,
+          bookingId: booking.id,
           kind: 'reminder',
           title: 'แจ้งเตือนงานพรุ่งนี้',
           message: `อย่าลืม! งานจัดเลี้ยงของคุณ ${no} จะจัดขึ้นพรุ่งนี้ ${booking.timeSlot}`,
@@ -68,6 +73,7 @@ export const buildNotifications = (bookings: Booking[]): NotificationItem[] => {
     } else if (booking.status === 'completed') {
       items.push({
         id: `${booking.id}-completed`,
+        bookingId: booking.id,
         kind: 'completed',
         title: 'งานเสร็จสมบูรณ์',
         message: `งานจัดเลี้ยง ${no} เสร็จสิ้นแล้ว ขอบคุณที่ใช้บริการ`,
@@ -76,6 +82,7 @@ export const buildNotifications = (bookings: Booking[]): NotificationItem[] => {
     } else if (booking.status === 'cancelled') {
       items.push({
         id: `${booking.id}-cancelled`,
+        bookingId: booking.id,
         kind: 'cancelled',
         title: 'การจองถูกยกเลิก',
         message: `การจองหมายเลข ${no} ถูกยกเลิก`,

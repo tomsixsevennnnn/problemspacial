@@ -2,7 +2,7 @@ import { Bell, Calendar, CheckCircle, Clock, XCircle } from 'lucide-react'
 import type { ComponentType } from 'react'
 import Navbar from '../components/Navbar'
 import { buildNotifications, formatRelativeTime, isNotificationUnread } from '../notifications'
-import type { NotificationKind } from '../notifications'
+import type { NotificationItem, NotificationKind } from '../notifications'
 import type { Booking, Screen, UserProfile } from '../types'
 
 interface NotificationsProps {
@@ -13,6 +13,8 @@ interface NotificationsProps {
   shopName: string
   /** เวลาที่เปิดหน้านี้ล่าสุด (ก่อนรอบนี้) — ใช้ตัดสินว่ารายการไหน "ยังไม่อ่าน" ยังโชว์ป้าย NEW อยู่ในการเข้าชมรอบนี้ */
   notifSeenAt: number
+  /** คลิกรายการแจ้งเตือน — พาไปเปิดใบจองของรายการนั้นที่หน้าประวัติการจอง */
+  onNotificationClick: (notif: NotificationItem) => void
 }
 
 type NotifStyle = {
@@ -30,7 +32,15 @@ const STYLE: Record<NotificationKind, NotifStyle> = {
   reminder: { icon: Calendar, color: 'text-blue-500', bg: 'bg-blue-50', border: 'border-blue-100' },
 }
 
-export default function Notifications({ navigate, user, bookings, notifCount, shopName, notifSeenAt }: NotificationsProps) {
+export default function Notifications({
+  navigate,
+  user,
+  bookings,
+  notifCount,
+  shopName,
+  notifSeenAt,
+  onNotificationClick,
+}: NotificationsProps) {
   const notifications = buildNotifications(bookings)
 
   return (
@@ -59,9 +69,10 @@ export default function Notifications({ navigate, user, bookings, notifCount, sh
               const Icon = style.icon
               const isNew = isNotificationUnread(notif, notifSeenAt)
               return (
-                <div
+                <button
                   key={notif.id}
-                  className={`bg-white rounded-2xl border shadow-sm p-4 transition-all hover:shadow-md ${
+                  onClick={() => onNotificationClick(notif)}
+                  className={`w-full text-left bg-white rounded-2xl border shadow-sm p-4 transition-all hover:shadow-md ${
                     isNew ? 'border-orange-100' : 'border-gray-100'
                   }`}
                 >
@@ -83,7 +94,7 @@ export default function Notifications({ navigate, user, bookings, notifCount, sh
                       <div className="w-2.5 h-2.5 bg-orange-500 rounded-full flex-shrink-0 mt-1" />
                     )}
                   </div>
-                </div>
+                </button>
               )
             })}
           </div>
