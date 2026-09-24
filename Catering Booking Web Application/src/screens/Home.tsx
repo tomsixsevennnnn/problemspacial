@@ -1,6 +1,6 @@
-import { ArrowRight, CheckCircle, ChevronRight, Clock, MapPin, Users } from 'lucide-react'
+import { ArrowRight, CheckCircle, ChevronRight, Clock, MapPin, MessageCircle, Phone, Users } from 'lucide-react'
 import Navbar from '../components/Navbar'
-import type { Screen, UserProfile } from '../types'
+import type { Screen, ShopInfo, UserProfile } from '../types'
 import heroImage1 from '../img/content1.webp'
 import sh1 from '../img/c1.jpg'
 import sh2 from '../img/f1.jpg'
@@ -14,6 +14,7 @@ interface HomeProps {
   user: UserProfile | null
   notifCount: number
   shopName: string
+  shopInfo: ShopInfo
 }
 
 
@@ -38,7 +39,7 @@ const GALLERY = [
   sh4,
 ]
 
-export default function Home({ navigate, user, notifCount, shopName }: HomeProps) {
+export default function Home({ navigate, user, notifCount, shopName, shopInfo }: HomeProps) {
   return (
     <div className="min-h-screen bg-gray-50">
       <Navbar navigate={navigate} currentScreen="home" user={user} notifCount={notifCount} shopName={shopName} />
@@ -184,10 +185,49 @@ export default function Home({ navigate, user, notifCount, shopName }: HomeProps
       </div>
 
       {/* Footer */}
-      <footer className="bg-gray-900 text-gray-400 py-10 px-6">
-        <div className="max-w-7xl mx-auto text-center">
-          <p className="font-bold text-white mb-1">ร้าน</p>
-          <p className="text-sm">© 2025 Krathai Catering Service. All rights reserved.</p>
+      <footer className="bg-gray-900 text-gray-400 py-12 px-6">
+        <div className="max-w-7xl mx-auto grid gap-8 sm:grid-cols-3 text-center sm:text-left">
+          <div>
+            <p className="font-bold text-white text-lg mb-1">{shopInfo.name}</p>
+            <p className="text-sm text-gray-500">{shopInfo.nameEn}</p>
+          </div>
+
+          {(shopInfo.phone || shopInfo.line) && (
+            <div>
+              <p className="text-xs font-semibold text-gray-300 uppercase tracking-wide mb-3">ติดต่อเรา</p>
+              <div className="space-y-2">
+                {shopInfo.phone && (
+                  <a
+                    href={`tel:${shopInfo.phone}`}
+                    className="flex items-center justify-center sm:justify-start gap-2 text-sm hover:text-orange-400 transition-colors"
+                  >
+                    <Phone size={14} className="flex-shrink-0" />
+                    {shopInfo.phone}
+                  </a>
+                )}
+                {shopInfo.line && (
+                  <div className="flex items-center justify-center sm:justify-start gap-2 text-sm">
+                    <MessageCircle size={14} className="flex-shrink-0" />
+                    {shopInfo.line}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {shopInfo.address && (
+            <div>
+              <p className="text-xs font-semibold text-gray-300 uppercase tracking-wide mb-3">ที่อยู่ร้าน</p>
+              <p className="flex items-start justify-center sm:justify-start gap-2 text-sm leading-relaxed">
+                <MapPin size={14} className="mt-0.5 flex-shrink-0" />
+                <span>{shopInfo.address}</span>
+              </p>
+            </div>
+          )}
+        </div>
+
+        <div className="max-w-7xl mx-auto text-center mt-8 pt-6 border-t border-gray-800">
+          <p className="text-xs">© {new Date().getFullYear()} {shopInfo.nameEn}. All rights reserved.</p>
         </div>
       </footer>
     </div>

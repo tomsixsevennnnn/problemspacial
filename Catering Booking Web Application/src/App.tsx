@@ -672,7 +672,7 @@ export default function App() {
         </button>
       )}
       {effectiveScreen === 'home' && (
-        <Home navigate={navigate} user={user} notifCount={notifCount} shopName={settings.shopInfo.name} />
+        <Home navigate={navigate} user={user} notifCount={notifCount} shopName={settings.shopInfo.name} shopInfo={settings.shopInfo} />
       )}
       {effectiveScreen === 'booking-calendar' && (
         <BookingCalendar
