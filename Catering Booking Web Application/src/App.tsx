@@ -21,6 +21,7 @@ import { roleFromAuth0User, type AppRole } from './auth'
 import { isSessionExpiredError } from './sessionExpired'
 import { DEFAULT_UNREAD_WINDOW_MS, unreadNotificationCount } from './notifications'
 import type { NotificationItem } from './notifications'
+import { usePolling } from './usePolling'
 import { api, type BackendUser, type CreatePackageInput, type UpdatePackageInput, type UploadKind } from './api'
 import ErrorBanner from './components/ErrorBanner'
 import Login from './screens/Login'
@@ -51,6 +52,7 @@ const OWNER_SCREENS: Screen[] = [
 
 /** เวลาที่ลูกค้าเปิดหน้า "การแจ้งเตือน" ล่าสุด — ใช้ตัดสินว่ารายการไหน "ยังไม่อ่าน" (เหมือน owner-notif-seen-at ฝั่งเจ้าของร้าน) */
 const NOTIF_SEEN_KEY = 'customer-notif-seen-at'
+const POLL_MS = 15_000
 
 const initialSettings: AppSettings = {
   shopInfo: DEFAULT_SHOP_INFO,
@@ -195,20 +197,20 @@ export default function App() {
    *  Dashboard/Calendar/Reports/Documents ด้วย), availability (คิววันที่เต็มตอนลูกค้าเลือกวันจัดงาน), packages, menus
    *  ให้ทุกเครื่องเห็นการจอง/แก้ไขจากที่อื่นโดยอัตโนมัติ ไม่ต้องกด refresh เอง — เทียบ JSON ก่อน setState ทุกตัว
    *  กัน re-render เปล่าๆ ตอนข้อมูลไม่ได้เปลี่ยนจริง (poll ส่วนใหญ่จะชนกับ cache ฝั่ง backend อยู่แล้ว ไม่ได้แพงเพิ่ม)
-   *  หยุด poll เมื่อสลับไปแท็บ/แอปอื่น (document.hidden) กันยิง request เปล่าๆ ตอนไม่มีใครดูอยู่ */
-  useEffect(() => {
+   *  usePolling จัดการหยุด/เริ่มตอนสลับแท็บและดึงค่าล่าสุดทันทีตอนกลับมาให้เองอยู่แล้ว (ดู usePolling.ts) */
+  usePolling(() => {
     if (!dataLoaded) return
-
-    const pollOnce = async () => {
-      try {
-        const token = await getAccessTokenSilently()
-        const [freshSettings, freshBookings, freshAvailability, freshPackages, freshMenus] = await Promise.all([
+    getAccessTokenSilently()
+      .then(token =>
+        Promise.all([
           api.settings(token),
           api.bookings(token),
           api.bookingsAvailability(token),
           api.packages(token),
           api.menus(token),
         ])
+      )
+      .then(([freshSettings, freshBookings, freshAvailability, freshPackages, freshMenus]) => {
         setSettings(prev => (JSON.stringify(prev) === JSON.stringify(freshSettings) ? prev : freshSettings))
         setBookings(prev => (JSON.stringify(prev) === JSON.stringify(freshBookings) ? prev : freshBookings))
         setAvailability(prev =>
@@ -216,24 +218,11 @@ export default function App() {
         )
         setPackages(prev => (JSON.stringify(prev) === JSON.stringify(freshPackages) ? prev : freshPackages))
         setMenus(prev => (JSON.stringify(prev) === JSON.stringify(freshMenus) ? prev : freshMenus))
-      } catch {
+      })
+      .catch(() => {
         // เงียบไว้ — ไม่ใช่รายการที่ผู้ใช้กดเอง ไม่ต้องเด้ง error banner รบกวน แค่ลองใหม่รอบถัดไป
-      }
-    }
-
-    const interval = setInterval(() => {
-      if (!document.hidden) pollOnce()
-    }, 15000)
-    // กลับมาที่แท็บนี้อีกครั้ง — ดึงค่าล่าสุดทันทีแทนที่จะรอรอบ poll ถัดไป
-    const onVisible = () => {
-      if (!document.hidden) pollOnce()
-    }
-    document.addEventListener('visibilitychange', onVisible)
-    return () => {
-      clearInterval(interval)
-      document.removeEventListener('visibilitychange', onVisible)
-    }
-  }, [dataLoaded, getAccessTokenSilently])
+      })
+  }, POLL_MS)
 
   const withToken = () => getAccessTokenSilently()
 

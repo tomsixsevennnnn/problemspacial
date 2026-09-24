@@ -1,9 +1,12 @@
 import { useAuth0 } from '@auth0/auth0-react'
 import { ChefHat } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { api } from '../api'
 import { AUTH0_CONNECTION } from '../auth'
 import { DEFAULT_SHOP_INFO, SHOP_NAME_CACHE_KEY } from '../documents'
+import { usePolling } from '../usePolling'
+
+const SHOP_NAME_POLL_MS = 20_000
 
 export default function Login() {
   const { loginWithRedirect, isLoading } = useAuth0()
@@ -11,29 +14,15 @@ export default function Login() {
   const [shopName, setShopName] = useState(() => localStorage.getItem(SHOP_NAME_CACHE_KEY) || DEFAULT_SHOP_INFO.name)
 
   // fetch ทันทีตอน mount แล้ว poll ต่อทุก 20 วินาที (หยุดตอนสลับแท็บ) — เผื่อเจ้าของร้านแก้ชื่อร้านระหว่างที่ค้างอยู่หน้านี้พอดี
-  useEffect(() => {
-    const fetchShopName = () =>
-      api
-        .publicShopInfo()
-        .then(info => {
-          setShopName(info.name)
-          localStorage.setItem(SHOP_NAME_CACHE_KEY, info.name)
-        })
-        .catch(() => {})
-
-    fetchShopName()
-    const interval = setInterval(() => {
-      if (!document.hidden) fetchShopName()
-    }, 20000)
-    const onVisible = () => {
-      if (!document.hidden) fetchShopName()
-    }
-    document.addEventListener('visibilitychange', onVisible)
-    return () => {
-      clearInterval(interval)
-      document.removeEventListener('visibilitychange', onVisible)
-    }
-  }, [])
+  usePolling(() => {
+    api
+      .publicShopInfo()
+      .then(info => {
+        setShopName(info.name)
+        localStorage.setItem(SHOP_NAME_CACHE_KEY, info.name)
+      })
+      .catch(() => {})
+  }, SHOP_NAME_POLL_MS)
 
   const loginAsCustomer = () =>
     loginWithRedirect({ authorizationParams: { connection: AUTH0_CONNECTION.customer } })

@@ -20,6 +20,7 @@ import type { AppSettings, Booking, MenuItem, StaffPlan } from '../../types'
 import { STAFF_ROLES, calculateStaff, isSamePlan, sumStaff, toPlan } from '../../staffing'
 import { bookingCostSummary } from '../../costing'
 import { docNumber } from '../../documents'
+import { usePolling } from '../../usePolling'
 
 const STATUS_CONFIG = {
   pending: { label: 'รอยืนยัน', bg: 'bg-yellow-100', text: 'text-yellow-700', dot: 'bg-yellow-400' },
@@ -29,6 +30,7 @@ const STATUS_CONFIG = {
 }
 
 const PAGE_SIZE = 20
+const POLL_MS = 15_000
 
 interface OrdersProps {
   bookings: Booking[]
@@ -106,20 +108,7 @@ export default function Orders({
 
   // realtime — poll รายการหน้าปัจจุบันทุก 15 วินาที ให้เห็นรายการจองใหม่/สถานะที่เปลี่ยนจากที่อื่น (เช่นลูกค้าจองเข้ามา
   // หรือแก้จากอีกแท็บ) โดยไม่ต้องสลับหน้าไปมาเอง — ก่อนหน้านี้ตารางโหลดแค่ตอน mount/เปลี่ยนหน้า/ค้นหาเท่านั้น
-  // หยุด poll เมื่อสลับไปแท็บ/แอปอื่น (document.hidden) กันยิง request เปล่าๆ ตอนไม่มีใครดูอยู่ (ดู pattern เดียวกันใน App.tsx)
-  useEffect(() => {
-    const interval = setInterval(() => {
-      if (!document.hidden) loadPage({ silent: true })
-    }, 15000)
-    const onVisible = () => {
-      if (!document.hidden) loadPage({ silent: true })
-    }
-    document.addEventListener('visibilitychange', onVisible)
-    return () => {
-      clearInterval(interval)
-      document.removeEventListener('visibilitychange', onVisible)
-    }
-  }, [loadPage])
+  usePolling(() => loadPage({ silent: true }), POLL_MS)
 
   // เอา bookings (ชุดเต็มจาก App.tsx) มาทับแถวใน pageData ถ้ามี — onUpdateBooking ใน App.tsx ทำ optimistic update
   // + rollback ให้ bookings ถูกต้องอยู่แล้ว (ดูคอมเมนต์ที่ handleUpdateBooking) เอามาสะท้อนใส่ตารางตรงนี้แทนที่จะ
