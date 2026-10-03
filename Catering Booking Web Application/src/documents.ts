@@ -11,7 +11,9 @@ export const DEFAULT_SHOP_INFO: ShopInfo = {
   bankName: '',
   bankAccountNumber: '',
   bankAccountName: '',
-  promptPayQr: '',
+  promptPayId: '',
+  promptPayFirstName: '',
+  promptPayLastName: '',
 }
 
 /** จำชื่อร้านล่าสุดไว้ใน localStorage เพื่อให้หน้า Login (ก่อน login ยังดึงจาก backend ไม่ได้) แสดงชื่อที่ถูกต้อง */

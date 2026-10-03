@@ -1,3 +1,4 @@
+import PromptPayQr from '../../components/PromptPayQr'
 import { useEffect, useRef, useState } from 'react'
 import {
   ArrowDown,
@@ -10,10 +11,8 @@ import {
   MapPin,
   Navigation,
   Percent,
-  QrCode,
   Save,
   Search,
-  Trash2,
   Truck,
   Users,
   Wallet,
@@ -22,14 +21,11 @@ import {
 import type { AppSettings } from '../../types'
 import { orderedCategories } from '../../data'
 import LocationMap from '../../components/LocationMap'
-import { pickImageAsDataUrl } from '../../imageUpload'
-import { resolveAssetUrl, type UploadKind } from '../../api'
 import { searchPlaces, searchPresets, type GeoResult } from '../../geo'
 
 interface SettingsProps {
   settings: AppSettings
-  onUpdateSettings: (patch: Partial<AppSettings>) => Promise<void>
-  onUploadImage: (kind: UploadKind, dataUrl: string) => Promise<string>
+  onUpdateSettings: (patch: Partial<AppSettings>) => Promise<AppSettings | null>
   /** เปลี่ยนค่า (Date.now()) เฉพาะตอน onUpdateSettings เพิ่งเซฟชนกัน (409) แล้วกู้ settings ใหม่มาแทน — สัญญาณ
    *  นี้ส่งมาจาก App.tsx โดยตรง เพราะ runAction ที่ห่อ onUpdateSettings กลืน error ทั้งหมดไว้ ไม่ throw ต่อมาให้
    *  ที่นี่ ทำให้ try/catch รอบ onUpdateSettings ในไฟล์นี้ใช้แยกแยะสำเร็จ/ชนกันเองไม่ได้ */
@@ -57,15 +53,12 @@ const WAGE_FIELDS: { key: 'wageChef' | 'wageAssistant' | 'wageServerPerTable' | 
   { key: 'wageDishwasher', label: 'ค่าแรงพนักงานล้างจาน', unit: 'บาท/คน/งาน' },
 ]
 
-export default function Settings({ settings, onUpdateSettings, onUploadImage, conflictAt }: SettingsProps) {
+export default function Settings({ settings, onUpdateSettings, conflictAt }: SettingsProps) {
   const [form, setForm] = useState<AppSettings>(settings)
   const [savedAt, setSavedAt] = useState<number | null>(null)
   const [saving, setSaving] = useState(false)
   const [locating, setLocating] = useState(false)
   const [locateError, setLocateError] = useState<string | null>(null)
-  const [qrUploading, setQrUploading] = useState(false)
-  const [qrError, setQrError] = useState<string | null>(null)
-  const qrInputRef = useRef<HTMLInputElement>(null)
 
   const [mapFocusKey, setMapFocusKey] = useState(0)
   const [placeSearch, setPlaceSearch] = useState('')
@@ -128,23 +121,6 @@ export default function Settings({ settings, onUpdateSettings, onUploadImage, co
     setSavedAt(null)
   }
 
-  /** เลือกรูป QR พร้อมเพย์จากเครื่อง — ย่อขนาดแล้วอัปโหลดขึ้น backend เก็บเป็นไฟล์ทันที */
-  const handlePickQr = async (file: File | undefined) => {
-    if (!file) return
-    setQrUploading(true)
-    setQrError(null)
-    try {
-      const dataUrl = await pickImageAsDataUrl(file)
-      const url = await onUploadImage('promptpay-qr', dataUrl)
-      setShopField('promptPayQr', url)
-    } catch (err) {
-      setQrError(err instanceof Error ? err.message : 'อัปโหลดรูปไม่สำเร็จ')
-    } finally {
-      setQrUploading(false)
-      if (qrInputRef.current) qrInputRef.current.value = ''
-    }
-  }
-
   const setNumberField = (
     key:
       | 'depositRate'
@@ -204,11 +180,13 @@ export default function Settings({ settings, onUpdateSettings, onUploadImage, co
     if (saving) return
     setSaving(true)
     try {
-      // หมายเหตุ: onUpdateSettings ห่อด้วย runAction ใน App.tsx ซึ่งกลืน error ทั้งหมดไว้ (ไม่ throw ต่อมาที่นี่)
-      // ตอนเซฟชนกัน (409) จึงยังมาถึง setSavedAt แม้จริงๆ ไม่สำเร็จ — ผู้ใช้เห็น error banner จาก App.tsx แทน
-      // ส่วนการ sync version กลับเข้า form หลังชนกันอยู่ที่ effect ด้านบน (ฟัง conflictAt ที่ App.tsx ส่งมา)
-      await onUpdateSettings(form)
-      setSavedAt(Date.now())
+      // คืน null ถ้าไม่สำเร็จ (App.tsx ขึ้น error banner ให้แล้ว) จึงจะขึ้น "บันทึกแล้ว" เฉพาะตอนสำเร็จจริง
+      const saved = await onUpdateSettings(form)
+      if (saved) {
+        // ใช้ version ที่ backend ตอบกลับมาตรงๆ — ไม่ต้องเดาจากการเปรียบเทียบฟิลด์ (ซึ่งเปราะเมื่อรูปแบบข้อมูลไม่ตรงกันทุกฟิลด์)
+        setForm(f => ({ ...f, version: saved.version }))
+        setSavedAt(Date.now())
+      }
     } finally {
       setSaving(false)
     }
@@ -296,7 +274,7 @@ export default function Settings({ settings, onUpdateSettings, onUploadImage, co
           <h2 className="font-bold text-gray-900">ข้อมูลการชำระเงิน</h2>
         </div>
         <p className="text-xs text-gray-400 mb-4">
-          บัญชี/QR พร้อมเพย์ให้ลูกค้าโอนมัดจำ — แสดงในใบเสนอราคาและใบจองทุกใบ
+          บัญชีธนาคารและเลขพร้อมเพย์ให้ลูกค้าโอนมัดจำ — แสดงในใบเสนอราคาและใบจองทุกใบ
         </p>
 
         <div className="grid sm:grid-cols-2 gap-4">
@@ -315,54 +293,54 @@ export default function Settings({ settings, onUpdateSettings, onUploadImage, co
         </div>
 
         <div className="mt-4">
-          <label className="block text-sm font-medium text-gray-700 mb-1.5">QR พร้อมเพย์</label>
+          <label htmlFor="promptPayId" className="block text-sm font-medium text-gray-700 mb-1.5">
+            เลขพร้อมเพย์ (เบอร์โทร / เลขบัตร ปชช. / เลขวอลเล็ต)
+          </label>
+          <p className="text-[11px] text-gray-400 mb-2 leading-relaxed">
+            กรอกแล้วระบบจะสร้าง QR ใหม่ให้อัตโนมัติทุกใบจอง พร้อมฝังยอดมัดจำที่ถูกต้องไว้ในตัว QR เลย (ลูกค้าสแกนแล้วยอดขึ้นเอง ไม่ต้องพิมพ์) ไม่ต้องอัปโหลดรูป QR ด้านล่างอีก
+          </p>
           <input
-            ref={qrInputRef}
-            type="file"
-            accept="image/*"
-            onChange={e => handlePickQr(e.target.files?.[0])}
-            className="hidden"
+            id="promptPayId"
+            type="text"
+            inputMode="numeric"
+            value={form.shopInfo.promptPayId}
+            placeholder="เช่น 0812345678"
+            onChange={e => setShopField('promptPayId', e.target.value)}
+            className="w-full sm:w-1/2 border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-transparent transition-all"
           />
 
-          {form.shopInfo.promptPayQr ? (
-            <div className="flex items-center gap-4">
-              <img
-                src={resolveAssetUrl(form.shopInfo.promptPayQr)}
-                alt="QR พร้อมเพย์"
-                className="w-28 h-28 rounded-xl border border-gray-200 object-contain bg-white"
+          <div className="grid sm:grid-cols-2 gap-4 mt-4">
+            <label className="block text-sm font-medium text-gray-700">
+              <span className="block mb-1.5">ชื่อ</span>
+              <input
+                type="text"
+                value={form.shopInfo.promptPayFirstName}
+                onChange={e => setShopField('promptPayFirstName', e.target.value)}
+                className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-transparent transition-all"
               />
-              <div className="flex flex-col gap-2">
-                <button
-                  type="button"
-                  onClick={() => qrInputRef.current?.click()}
-                  disabled={qrUploading}
-                  className="flex items-center gap-1.5 text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1.5 rounded-full transition-colors"
-                >
-                  {qrUploading ? <Loader2 size={12} className="animate-spin" /> : <QrCode size={12} />}
-                  เปลี่ยนรูป
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setShopField('promptPayQr', '')}
-                  className="flex items-center gap-1.5 text-xs bg-red-50 hover:bg-red-100 text-red-600 px-3 py-1.5 rounded-full transition-colors"
-                >
-                  <Trash2 size={12} />
-                  ลบรูป
-                </button>
-              </div>
+            </label>
+            <label className="block text-sm font-medium text-gray-700">
+              <span className="block mb-1.5">นามสกุล</span>
+              <input
+                type="text"
+                value={form.shopInfo.promptPayLastName}
+                onChange={e => setShopField('promptPayLastName', e.target.value)}
+                className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-transparent transition-all"
+              />
+            </label>
+          </div>
+
+          {form.shopInfo.promptPayId && (
+            <div className="mt-4">
+              <PromptPayQr promptPayId={form.shopInfo.promptPayId} amount={100} size={112} className="rounded-xl border border-gray-200 bg-white" />
+              {(form.shopInfo.promptPayFirstName || form.shopInfo.promptPayLastName) && (
+                <p className="mt-2 text-sm font-medium text-gray-800">
+                  {form.shopInfo.promptPayFirstName} {form.shopInfo.promptPayLastName}
+                </p>
+              )}
+              <p className="text-[11px] text-gray-400 mt-1">ตัวอย่าง QR (ยอด 100 บาท) — ของจริงจะฝังยอดมัดจำตามใบจองแต่ละใบ</p>
             </div>
-          ) : (
-            <button
-              type="button"
-              onClick={() => qrInputRef.current?.click()}
-              disabled={qrUploading}
-              className="flex items-center gap-2 text-sm text-gray-500 hover:text-orange-600 border border-dashed border-gray-300 hover:border-orange-300 rounded-xl px-4 py-6 w-full justify-center transition-colors"
-            >
-              {qrUploading ? <Loader2 size={16} className="animate-spin" /> : <QrCode size={16} />}
-              {qrUploading ? 'กำลังอัปโหลด...' : 'อัปโหลดรูป QR พร้อมเพย์'}
-            </button>
           )}
-          {qrError && <p className="mt-2 text-xs text-red-500">{qrError}</p>}
         </div>
       </div>
 

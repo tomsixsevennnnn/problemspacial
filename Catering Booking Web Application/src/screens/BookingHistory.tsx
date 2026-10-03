@@ -6,6 +6,7 @@ import type { AppSettings, Booking, Screen, UserProfile } from '../types'
 import { DOC_LABEL, bookingPricing, docNumber, type DocType } from '../documents'
 import { pickImageAsDataUrl } from '../imageUpload'
 import { resolveAssetUrl, type UploadKind } from '../api'
+import PromptPayQr from '../components/PromptPayQr'
 
 interface BookingHistoryProps {
   navigate: (s: Screen) => void
@@ -391,7 +392,7 @@ export default function BookingHistory({
               </div>
 
               {/* ช่องทางการโอนมัดจำ — โชว์ตรงจุดที่ลูกค้าจะมาแนบสลิป กันต้องสลับไปเปิดใบเสนอราคาแยกเพื่อดูเลขบัญชี */}
-              {(settings.shopInfo.bankAccountNumber || settings.shopInfo.promptPayQr) && (
+              {(settings.shopInfo.bankAccountNumber || settings.shopInfo.promptPayId) && (
                 <div className="bg-gray-50 rounded-2xl p-4">
                   <div className="flex items-center justify-between mb-3">
                     <span className="text-sm font-bold text-gray-800">ยอดมัดจำที่ต้องโอน</span>
@@ -413,12 +414,16 @@ export default function BookingHistory({
                         )}
                       </div>
                     )}
-                    {settings.shopInfo.promptPayQr && (
-                      <img
-                        src={resolveAssetUrl(settings.shopInfo.promptPayQr)}
-                        alt="QR พร้อมเพย์"
-                        className="w-32 h-32 rounded-lg border border-gray-200 object-contain bg-white flex-shrink-0"
-                      />
+                    {settings.shopInfo.promptPayId && (
+                      <div className="flex-shrink-0 text-center">
+                        <PromptPayQr
+                          promptPayId={settings.shopInfo.promptPayId}
+                          amount={bookingPricing(detailBooking, settings.depositRate).deposit}
+                          size={128}
+                          className="rounded-lg border border-gray-200 bg-white"
+                        />
+                        <p className="text-[10px] text-gray-400 mt-1">สแกนเพื่อโอนมัดจำ</p>
+                      </div>
                     )}
                   </div>
                 </div>

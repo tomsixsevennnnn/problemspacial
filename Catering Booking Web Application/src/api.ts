@@ -74,7 +74,9 @@ interface BackendSettings {
   bankName: string
   bankAccountNumber: string
   bankAccountName: string
-  promptPayQr?: string | null
+  promptPayId?: string | null
+  promptPayFirstName?: string | null
+  promptPayLastName?: string | null
   depositRate: number
   deliveryFee: number
   freeDeliveryMinTables: number
@@ -100,7 +102,9 @@ const toFrontendSettings = (s: BackendSettings): AppSettings => ({
     bankName: s.bankName ?? '',
     bankAccountNumber: s.bankAccountNumber ?? '',
     bankAccountName: s.bankAccountName ?? '',
-    promptPayQr: s.promptPayQr ?? '',
+    promptPayId: s.promptPayId ?? '',
+    promptPayFirstName: s.promptPayFirstName ?? '',
+    promptPayLastName: s.promptPayLastName ?? '',
   },
   depositRate: s.depositRate,
   deliveryFee: s.deliveryFee,
@@ -136,7 +140,9 @@ const toFrontendShopInfo = (s: BackendPublicShopInfo): ShopInfo => ({
   bankName: '',
   bankAccountNumber: '',
   bankAccountName: '',
-  promptPayQr: '',
+  promptPayId: '',
+  promptPayFirstName: '',
+  promptPayLastName: '',
 })
 
 const toBackendSettingsPatch = (patch: Partial<AppSettings>): Record<string, unknown> => {
@@ -151,7 +157,9 @@ const toBackendSettingsPatch = (patch: Partial<AppSettings>): Record<string, unk
   if (si?.bankName !== undefined) out.bankName = si.bankName
   if (si?.bankAccountNumber !== undefined) out.bankAccountNumber = si.bankAccountNumber
   if (si?.bankAccountName !== undefined) out.bankAccountName = si.bankAccountName
-  if (si?.promptPayQr !== undefined) out.promptPayQr = si.promptPayQr
+  if (si?.promptPayId !== undefined) out.promptPayId = si.promptPayId
+  if (si?.promptPayFirstName !== undefined) out.promptPayFirstName = si.promptPayFirstName
+  if (si?.promptPayLastName !== undefined) out.promptPayLastName = si.promptPayLastName
   if (patch.depositRate !== undefined) out.depositRate = patch.depositRate
   if (patch.deliveryFee !== undefined) out.deliveryFee = patch.deliveryFee
   if (patch.freeDeliveryMinTables !== undefined) out.freeDeliveryMinTables = patch.freeDeliveryMinTables

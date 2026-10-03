@@ -1,5 +1,5 @@
 import type { Booking, ShopInfo } from '../types'
-import { resolveAssetUrl } from '../api'
+import PromptPayQr from './PromptPayQr'
 import {
   DEFAULT_DEPOSIT_RATE,
   DEFAULT_SHOP_INFO,
@@ -195,7 +195,7 @@ export default function BookingDocument({
       </div>
 
       {/* ข้อมูลการโอนเงิน */}
-      {(shopInfo.bankAccountNumber || shopInfo.promptPayQr) && (
+      {(shopInfo.bankAccountNumber || shopInfo.promptPayId) && (
         <div className="bg-gray-50 rounded-xl p-4 mb-5">
           <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wide mb-3">ช่องทางการโอนเงิน</p>
           <div className="flex flex-wrap items-center gap-4">
@@ -208,12 +208,11 @@ export default function BookingDocument({
                 {shopInfo.bankAccountName && <p className="text-sm text-gray-600">{shopInfo.bankAccountName}</p>}
               </div>
             )}
-            {shopInfo.promptPayQr && (
-              <img
-                src={resolveAssetUrl(shopInfo.promptPayQr)}
-                alt="QR พร้อมเพย์"
-                className="w-28 h-28 rounded-lg border border-gray-200 object-contain bg-white flex-shrink-0"
-              />
+            {shopInfo.promptPayId && (
+              <div className="flex-shrink-0 text-center">
+                <PromptPayQr promptPayId={shopInfo.promptPayId} amount={price.deposit} size={112} className="rounded-lg border border-gray-200 bg-white" />
+                <p className="text-[10px] text-gray-400 mt-1">สแกนเพื่อโอนมัดจำ {price.deposit.toLocaleString()} ฿</p>
+              </div>
             )}
           </div>
         </div>

@@ -192,8 +192,10 @@ export interface ShopInfo {
   bankName: string
   bankAccountNumber: string
   bankAccountName: string
-  /** รูป QR พร้อมเพย์ (data URL) — '' แปลว่ายังไม่ได้อัปโหลด */
-  promptPayQr: string
+  /** เลขพร้อมเพย์ (เบอร์โทร / เลขบัตร ปชช. / เลขวอลเล็ต) — ใช้สร้าง QR ตามยอดมัดจำของแต่ละใบจอง */
+  promptPayId: string
+  promptPayFirstName: string
+  promptPayLastName: string
 }
 
 /** ค่าตั้งค่าของร้านที่เจ้าของร้านแก้ไขได้จากหน้า "ตั้งค่า" */

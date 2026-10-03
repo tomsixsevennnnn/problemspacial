@@ -161,6 +161,11 @@ model Settings {
   bankName              String  @default("")
   bankAccountNumber     String  @default("")
   bankAccountName       String  @default("")
+  /** เลขพร้อมเพย์ (เบอร์โทร / เลขบัตร ปชช. / เลขวอลเล็ต) — ใช้สร้าง QR ตามยอดมัดจำของแต่ละใบจอง */
+  promptPayId           String  @default("")
+  /** ชื่อ-นามสกุลเจ้าของบัญชีพร้อมเพย์ — แสดงใต้ QR ให้ลูกค้าตรวจว่าโอนถูกคน */
+  promptPayFirstName    String  @default("")
+  promptPayLastName     String  @default("")
   /** รูป QR พร้อมเพย์ (data URL) */
   promptPayQr           String?
   /** 0–1 เช่น 0.5 = 50% */

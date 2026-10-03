@@ -451,12 +451,14 @@ export default function App() {
     setBooking(b => ({ ...b, selectedMenus: menus }))
   }
 
-  const handleUpdateSettings = (patch: Partial<AppSettings>) =>
-    runAction(async () => {
+  /** คืนค่าที่บันทึกสำเร็จ (พร้อม version ใหม่) — null = ไม่สำเร็จ (error banner ขึ้นให้แล้ว) */
+  const handleUpdateSettings = async (patch: Partial<AppSettings>): Promise<AppSettings | null> => {
+    let saved: AppSettings | null = null
+    await runAction(async () => {
       const token = await withToken()
       try {
-        const updated = await api.updateSettings(token, patch)
-        setSettings(updated)
+        saved = await api.updateSettings(token, patch)
+        setSettings(saved)
       } catch (err) {
         // 409 = มีคนแก้ไขค่าตั้งค่าไปแล้วก่อนหน้านี้ (อีกแท็บ/อีกคน) — โหลดค่าล่าสุดจาก backend มาแทนที่ค่าในหน้าจอ
         // แทนที่จะทิ้งข้อความ error ดิบให้ผู้ใช้เห็น (มี version เดิมค้างอยู่ ไม่มีทาง save ซ้ำผ่านได้จนกว่าจะ refresh)
@@ -470,6 +472,8 @@ export default function App() {
         throw err
       }
     })
+    return saved
+  }
 
   const handleConfirm = () =>
     runAction(async () => {
@@ -650,7 +654,6 @@ export default function App() {
           <Settings
             settings={settings}
             onUpdateSettings={handleUpdateSettings}
-            onUploadImage={handleUploadImage}
             conflictAt={settingsConflictAt}
           />
         )}
