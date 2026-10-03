@@ -11,7 +11,6 @@ import {
   Loader2,
   Plus,
   RotateCcw,
-  Search,
   Trash2,
   X,
   ZoomIn,
@@ -30,7 +29,7 @@ interface MenusProps {
   onSaveMenu: (item: MenuItem) => void
   onDeleteMenu: (id: string) => Promise<void>
   onUploadImage: (kind: UploadKind, dataUrl: string) => Promise<string>
-  onFetchMenusPage: (params: { page: number; pageSize: number; search: string; category: string }) => Promise<MenusPage>
+  onFetchMenusPage: (params: { page: number; pageSize: number; category: string }) => Promise<MenusPage>
 }
 
 interface MenuForm {
@@ -129,30 +128,22 @@ export default function Menus({
     setForm(f => ({ ...f, imageScale: clamp(Math.round(scale * 100) / 100, MIN_SCALE, MAX_SCALE) }))
   }
 
-  const [search, setSearch] = useState('')
-  const [debouncedSearch, setDebouncedSearch] = useState('')
   const [page, setPage] = useState(1)
   const [pageData, setPageData] = useState<{ items: MenuItem[]; total: number } | null>(null)
   const [loadingPage, setLoadingPage] = useState(false)
   const [pageError, setPageError] = useState<string | null>(null)
 
-  // debounce ช่องค้นหา กันยิง request ทุกตัวอักษร
-  useEffect(() => {
-    const timer = setTimeout(() => setDebouncedSearch(search), 300)
-    return () => clearTimeout(timer)
-  }, [search])
-
-  // เปลี่ยนคำค้นหาหรือหมวด = กลับไปหน้า 1
+  // เปลี่ยนหมวด = กลับไปหน้า 1
   useEffect(() => {
     setPage(1)
-  }, [debouncedSearch, activeCategory])
+  }, [activeCategory])
 
   /** silent = true ตอนรีเฟรชเบื้องหลัง (เมนูเปลี่ยนจากอีกเครื่อง/หลังบันทึก) ไม่โชว์ spinner กันการ์ดกระพริบ */
   const loadPage = useCallback(
     (opts: { silent?: boolean } = {}) => {
       if (!opts.silent) setLoadingPage(true)
       if (!opts.silent) setPageError(null)
-      onFetchMenusPage({ page, pageSize: MENUS_PAGE_SIZE, search: debouncedSearch, category: activeCategory })
+      onFetchMenusPage({ page, pageSize: MENUS_PAGE_SIZE, category: activeCategory })
         .then(res => setPageData({ items: res.items, total: res.total }))
         .catch(err => {
           if (!opts.silent) setPageError(err instanceof Error ? err.message : 'โหลดเมนูไม่สำเร็จ')
@@ -161,7 +152,7 @@ export default function Menus({
           if (!opts.silent) setLoadingPage(false)
         })
     },
-    [page, debouncedSearch, activeCategory, onFetchMenusPage],
+    [page, activeCategory, onFetchMenusPage],
   )
 
   useEffect(() => {
@@ -281,17 +272,6 @@ export default function Menus({
             <Plus size={14} />
             เพิ่มเมนู
           </button>
-        </div>
-
-        <div className="relative mb-4">
-          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-          <input
-            type="text"
-            placeholder="ค้นหาชื่อเมนูในหมวดนี้..."
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            className="w-full pl-9 pr-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
-          />
         </div>
 
         {loadingPage && (

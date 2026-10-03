@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Calendar, Check, Eye, FileText, Filter, Loader2, Printer, Search, Send, Upload, X } from 'lucide-react'
+import { Calendar, Check, Eye, FileText, Filter, Landmark, Loader2, Printer, QrCode, Search, Send, Upload, X } from 'lucide-react'
 import Navbar from '../components/Navbar'
 import BookingDocument from '../components/BookingDocument'
 import type { AppSettings, Booking, Screen, UserProfile } from '../types'
@@ -49,6 +49,11 @@ export default function BookingHistory({
   /** รูปที่เลือกไว้แต่ยังไม่ได้กดส่ง — ผูกกับ bookingId เพื่อกันเผลอโชว์ข้ามรายการ */
   const [slipDraft, setSlipDraft] = useState<{ id: string; dataUrl: string } | null>(null)
   const slipInputRef = useRef<HTMLInputElement>(null)
+
+  const hasBankTransfer = !!settings.shopInfo.bankAccountNumber
+  const hasQr = !!settings.shopInfo.promptPayId
+  /** เลือกช่องทางที่มีให้ก่อน ถ้ามีทั้งคู่ให้ QR มาก่อน (สแกนแล้วยอดขึ้นเองสะดวกกว่า) */
+  const [payMethod, setPayMethod] = useState<'bank' | 'qr'>(hasQr ? 'qr' : 'bank')
 
   const allBookings = bookings
 
@@ -392,7 +397,7 @@ export default function BookingHistory({
               </div>
 
               {/* ช่องทางการโอนมัดจำ — โชว์ตรงจุดที่ลูกค้าจะมาแนบสลิป กันต้องสลับไปเปิดใบเสนอราคาแยกเพื่อดูเลขบัญชี */}
-              {(settings.shopInfo.bankAccountNumber || settings.shopInfo.promptPayId) && (
+              {(hasBankTransfer || hasQr) && (
                 <div className="bg-gray-50 rounded-2xl p-4">
                   <div className="flex items-center justify-between mb-3">
                     <span className="text-sm font-bold text-gray-800">ยอดมัดจำที่ต้องโอน</span>
@@ -400,8 +405,35 @@ export default function BookingHistory({
                       {bookingPricing(detailBooking, settings.depositRate).deposit.toLocaleString()} ฿
                     </span>
                   </div>
+
+                  {/* มีให้เลือกมากกว่า 1 ช่องทางถึงจะโชว์ตัวเลือก — ถ้ามีทางเดียวก็ไม่ต้องให้กดอะไร */}
+                  {hasBankTransfer && hasQr && (
+                    <div className="flex gap-2 mb-3">
+                      <button
+                        type="button"
+                        onClick={() => setPayMethod('qr')}
+                        className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs font-semibold transition-colors ${
+                          payMethod === 'qr' ? 'bg-orange-500 text-white' : 'bg-white text-gray-500 border border-gray-200'
+                        }`}
+                      >
+                        <QrCode size={13} />
+                        สแกน QR พร้อมเพย์
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setPayMethod('bank')}
+                        className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs font-semibold transition-colors ${
+                          payMethod === 'bank' ? 'bg-orange-500 text-white' : 'bg-white text-gray-500 border border-gray-200'
+                        }`}
+                      >
+                        <Landmark size={13} />
+                        โอนเข้าบัญชีธนาคาร
+                      </button>
+                    </div>
+                  )}
+
                   <div className="flex flex-wrap items-center gap-4">
-                    {settings.shopInfo.bankAccountNumber && (
+                    {(payMethod === 'bank' || !hasQr) && hasBankTransfer && (
                       <div className="flex-1 min-w-[180px] space-y-1">
                         {settings.shopInfo.bankName && (
                           <p className="text-sm font-semibold text-gray-700">{settings.shopInfo.bankName}</p>
@@ -414,15 +446,21 @@ export default function BookingHistory({
                         )}
                       </div>
                     )}
-                    {settings.shopInfo.promptPayId && (
-                      <div className="flex-shrink-0 text-center">
+                    {(payMethod === 'qr' || !hasBankTransfer) && hasQr && (
+                      <div className="flex items-center gap-3">
                         <PromptPayQr
                           promptPayId={settings.shopInfo.promptPayId}
                           amount={bookingPricing(detailBooking, settings.depositRate).deposit}
-                          size={128}
-                          className="rounded-lg border border-gray-200 bg-white"
+                          className="w-32 h-32 rounded-lg border border-gray-200 bg-white flex-shrink-0"
                         />
-                        <p className="text-[10px] text-gray-400 mt-1">สแกนเพื่อโอนมัดจำ</p>
+                        <div className="text-left space-y-1">
+                          {(settings.shopInfo.promptPayFirstName || settings.shopInfo.promptPayLastName) && (
+                            <p className="text-lg font-bold text-gray-900 leading-tight">
+                              {settings.shopInfo.promptPayFirstName} {settings.shopInfo.promptPayLastName}
+                            </p>
+                          )}
+                          <p className="text-xs text-gray-400">สแกนแล้วยอดขึ้นอัตโนมัติ</p>
+                        </div>
                       </div>
                     )}
                   </div>

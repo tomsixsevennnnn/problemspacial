@@ -211,6 +211,11 @@ export default function BookingDocument({
             {shopInfo.promptPayId && (
               <div className="flex-shrink-0 text-center">
                 <PromptPayQr promptPayId={shopInfo.promptPayId} amount={price.deposit} size={112} className="rounded-lg border border-gray-200 bg-white" />
+                {(shopInfo.promptPayFirstName || shopInfo.promptPayLastName) && (
+                  <p className="text-xs text-gray-600 mt-1">
+                    {shopInfo.promptPayFirstName} {shopInfo.promptPayLastName}
+                  </p>
+                )}
                 <p className="text-[10px] text-gray-400 mt-1">สแกนเพื่อโอนมัดจำ {price.deposit.toLocaleString()} ฿</p>
               </div>
             )}
