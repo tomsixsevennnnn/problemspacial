@@ -214,6 +214,13 @@ export interface CreateBookingInput {
   lineId?: string
 }
 
+export interface MenusPage {
+  items: MenuItem[]
+  total: number
+  page: number
+  pageSize: number
+}
+
 export interface BookingsPage {
   items: Booking[]
   total: number
@@ -308,6 +315,18 @@ export const api = {
     request<Package[]>(token, '/packages/reorder', { method: 'PATCH', body: JSON.stringify({ ids }) }),
 
   menus: (token: string) => request<MenuItem[]>(token, '/menus'),
+
+  /** เมนูแบบแบ่งหน้า + ค้นหาชื่อ/กรองประเภท (backend คืน { data, total, page, limit } เมื่อส่ง page มา) */
+  menusPage: async (
+    token: string,
+    params: { page: number; pageSize: number; search?: string; category?: string },
+  ): Promise<MenusPage> => {
+    const q = new URLSearchParams({ page: String(params.page), limit: String(params.pageSize) })
+    if (params.search?.trim()) q.set('search', params.search.trim())
+    if (params.category) q.set('category', params.category)
+    const res = await request<{ data: MenuItem[]; total: number; page: number; limit: number }>(token, `/menus?${q.toString()}`)
+    return { items: res.data, total: res.total, page: res.page, pageSize: res.limit }
+  },
 
   /** ตามลิงก์ย่อ Google Maps ฝั่งเซิร์ฟเวอร์ (browser ยิงตรงไม่ได้เพราะ Google ไม่เปิด CORS) — คืน URL ปลายทางที่ตามแล้ว */
   resolveMapsLink: async (token: string, url: string): Promise<string> =>

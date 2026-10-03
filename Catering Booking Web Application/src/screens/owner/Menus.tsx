@@ -1,7 +1,9 @@
-import { useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { PointerEvent as ReactPointerEvent } from 'react'
 import {
   AlertTriangle,
+  ChevronLeft,
+  ChevronRight,
   Edit2,
   Eye,
   EyeOff,
@@ -9,13 +11,14 @@ import {
   Loader2,
   Plus,
   RotateCcw,
+  Search,
   Trash2,
   X,
   ZoomIn,
   ZoomOut,
 } from 'lucide-react'
 import DishTile from '../../components/DishTile'
-import { resolveAssetUrl, type UploadKind } from '../../api'
+import { resolveAssetUrl, type MenusPage, type UploadKind } from '../../api'
 import type { AppSettings, MenuItem, Package } from '../../types'
 import { CATEGORY_MAP, orderedCategories } from '../../data'
 import { pickImageAsDataUrl } from '../../imageUpload'
@@ -27,6 +30,7 @@ interface MenusProps {
   onSaveMenu: (item: MenuItem) => void
   onDeleteMenu: (id: string) => Promise<void>
   onUploadImage: (kind: UploadKind, dataUrl: string) => Promise<string>
+  onFetchMenusPage: (params: { page: number; pageSize: number; search: string; category: string }) => Promise<MenusPage>
 }
 
 interface MenuForm {
@@ -39,6 +43,7 @@ interface MenuForm {
   imageScale: number
 }
 
+const MENUS_PAGE_SIZE = 12
 const CENTER_POSITION = { x: 50, y: 50 }
 const DEFAULT_SCALE = 1
 const MIN_SCALE = 1
@@ -55,7 +60,15 @@ const emptyForm = (category: string): MenuForm => ({
   imageScale: DEFAULT_SCALE,
 })
 
-export default function Menus({ menus, packages, settings, onSaveMenu, onDeleteMenu, onUploadImage }: MenusProps) {
+export default function Menus({
+  menus,
+  packages,
+  settings,
+  onSaveMenu,
+  onDeleteMenu,
+  onUploadImage,
+  onFetchMenusPage,
+}: MenusProps) {
   const categories = orderedCategories(settings.categoryOrder)
   const [activeCategory, setActiveCategory] = useState(categories[0].id)
   const [showModal, setShowModal] = useState(false)
@@ -116,7 +129,53 @@ export default function Menus({ menus, packages, settings, onSaveMenu, onDeleteM
     setForm(f => ({ ...f, imageScale: clamp(Math.round(scale * 100) / 100, MIN_SCALE, MAX_SCALE) }))
   }
 
-  const filtered = menus.filter(m => m.category === activeCategory)
+  const [search, setSearch] = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
+  const [page, setPage] = useState(1)
+  const [pageData, setPageData] = useState<{ items: MenuItem[]; total: number } | null>(null)
+  const [loadingPage, setLoadingPage] = useState(false)
+  const [pageError, setPageError] = useState<string | null>(null)
+
+  // debounce ช่องค้นหา กันยิง request ทุกตัวอักษร
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(search), 300)
+    return () => clearTimeout(timer)
+  }, [search])
+
+  // เปลี่ยนคำค้นหาหรือหมวด = กลับไปหน้า 1
+  useEffect(() => {
+    setPage(1)
+  }, [debouncedSearch, activeCategory])
+
+  /** silent = true ตอนรีเฟรชเบื้องหลัง (เมนูเปลี่ยนจากอีกเครื่อง/หลังบันทึก) ไม่โชว์ spinner กันการ์ดกระพริบ */
+  const loadPage = useCallback(
+    (opts: { silent?: boolean } = {}) => {
+      if (!opts.silent) setLoadingPage(true)
+      if (!opts.silent) setPageError(null)
+      onFetchMenusPage({ page, pageSize: MENUS_PAGE_SIZE, search: debouncedSearch, category: activeCategory })
+        .then(res => setPageData({ items: res.items, total: res.total }))
+        .catch(err => {
+          if (!opts.silent) setPageError(err instanceof Error ? err.message : 'โหลดเมนูไม่สำเร็จ')
+        })
+        .finally(() => {
+          if (!opts.silent) setLoadingPage(false)
+        })
+    },
+    [page, debouncedSearch, activeCategory, onFetchMenusPage],
+  )
+
+  useEffect(() => {
+    loadPage()
+  }, [loadPage])
+
+  // menus (ชุดเต็มจาก App) เปลี่ยนเมื่อมีการบันทึก/ลบ หรือ SSE/poll ดึงของใหม่มา — โหลดหน้าปัจจุบันใหม่ให้ตรงกัน
+  useEffect(() => {
+    loadPage({ silent: true })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [menus])
+
+  const filtered = pageData?.items ?? []
+  const totalPages = pageData ? Math.max(1, Math.ceil(pageData.total / MENUS_PAGE_SIZE)) : 1
 
   /** เมนูนี้ถูกใช้ในกี่แพ็กเกจ (ใช้เตือนก่อนลบ) */
   const usageOf = (id: string) =>
@@ -213,7 +272,7 @@ export default function Menus({ menus, packages, settings, onSaveMenu, onDeleteM
         <div className="flex items-center justify-between mb-4">
           <h3 className="font-bold text-gray-800">
             {CATEGORY_MAP[activeCategory]?.label}
-            <span className="text-sm font-normal text-gray-400 ml-2">({filtered.length} รายการ)</span>
+            <span className="text-sm font-normal text-gray-400 ml-2">({pageData?.total ?? 0} รายการ)</span>
           </h3>
           <button
             onClick={openAdd}
@@ -223,6 +282,25 @@ export default function Menus({ menus, packages, settings, onSaveMenu, onDeleteM
             เพิ่มเมนู
           </button>
         </div>
+
+        <div className="relative mb-4">
+          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+          <input
+            type="text"
+            placeholder="ค้นหาชื่อเมนูในหมวดนี้..."
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            className="w-full pl-9 pr-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
+          />
+        </div>
+
+        {loadingPage && (
+          <div className="flex items-center justify-center gap-2 py-6 text-sm text-gray-400">
+            <Loader2 size={16} className="animate-spin" />
+            กำลังโหลด...
+          </div>
+        )}
+        {!loadingPage && pageError && <div className="text-center py-6 text-sm text-red-500">{pageError}</div>}
 
         <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
           {filtered.map((menu) => {
@@ -288,7 +366,7 @@ export default function Menus({ menus, packages, settings, onSaveMenu, onDeleteM
             )
           })}
 
-          {filtered.length === 0 && (
+          {!loadingPage && !pageError && filtered.length === 0 && (
             <div className="col-span-full text-center py-16 text-gray-400">
               <p className="text-4xl mb-3">🍽️</p>
               <p className="mb-4">ไม่มีเมนูในหมวดนี้</p>
@@ -302,6 +380,26 @@ export default function Menus({ menus, packages, settings, onSaveMenu, onDeleteM
             </div>
           )}
         </div>
+
+        {!loadingPage && !pageError && pageData && pageData.total > MENUS_PAGE_SIZE && (
+          <div className="flex items-center justify-end gap-2 mt-4 text-xs text-gray-500">
+            <button
+              onClick={() => setPage(p => Math.max(1, p - 1))}
+              disabled={page <= 1}
+              className="w-7 h-7 flex items-center justify-center rounded-lg border border-gray-200 disabled:opacity-40 hover:border-orange-300 transition-colors"
+            >
+              <ChevronLeft size={14} />
+            </button>
+            <span>หน้า {page} / {totalPages}</span>
+            <button
+              onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+              disabled={page >= totalPages}
+              className="w-7 h-7 flex items-center justify-center rounded-lg border border-gray-200 disabled:opacity-40 hover:border-orange-300 transition-colors"
+            >
+              <ChevronRight size={14} />
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Add / Edit modal */}

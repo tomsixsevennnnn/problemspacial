@@ -635,6 +635,9 @@ export default function App() {
             onSaveMenu={handleSaveMenu}
             onDeleteMenu={handleDeleteMenu}
             onUploadImage={handleUploadImage}
+            onFetchMenusPage={({ page, pageSize, search, category }) =>
+              withToken().then(token => api.menusPage(token, { page, pageSize, search, category }))
+            }
           />
         )}
         {effectiveScreen === 'owner-documents' && (
