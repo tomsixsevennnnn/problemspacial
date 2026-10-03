@@ -22,6 +22,8 @@ import { isSessionExpiredError } from './sessionExpired'
 import { DEFAULT_UNREAD_WINDOW_MS, unreadNotificationCount } from './notifications'
 import type { NotificationItem } from './notifications'
 import { usePolling } from './usePolling'
+import { useBookingsStream } from './useBookingsStream'
+import { useAppStream } from './useAppStream'
 import { api, type BackendUser, type CreatePackageInput, type UpdatePackageInput, type UploadKind } from './api'
 import ErrorBanner from './components/ErrorBanner'
 import Login from './screens/Login'
@@ -52,7 +54,7 @@ const OWNER_SCREENS: Screen[] = [
 
 /** เวลาที่ลูกค้าเปิดหน้า "การแจ้งเตือน" ล่าสุด — ใช้ตัดสินว่ารายการไหน "ยังไม่อ่าน" (เหมือน owner-notif-seen-at ฝั่งเจ้าของร้าน) */
 const NOTIF_SEEN_KEY = 'customer-notif-seen-at'
-const POLL_MS = 15_000
+const POLL_MS = 30_000
 
 const initialSettings: AppSettings = {
   shopInfo: DEFAULT_SHOP_INFO,
@@ -193,38 +195,45 @@ export default function App() {
     }
   }, [isAuthenticated, getAccessTokenSilently, auth0User, retryKey, logout])
 
-  /** poll ข้อมูลที่แชร์ข้ามเครื่อง/แท็บทุก 15 วินาที — settings, bookings (กระทบกระดิ่งแจ้งเตือนใน OwnerLayout +
-   *  Dashboard/Calendar/Reports/Documents ด้วย), availability (คิววันที่เต็มตอนลูกค้าเลือกวันจัดงาน), packages, menus
-   *  ให้ทุกเครื่องเห็นการจอง/แก้ไขจากที่อื่นโดยอัตโนมัติ ไม่ต้องกด refresh เอง — เทียบ JSON ก่อน setState ทุกตัว
-   *  กัน re-render เปล่าๆ ตอนข้อมูลไม่ได้เปลี่ยนจริง (poll ส่วนใหญ่จะชนกับ cache ฝั่ง backend อยู่แล้ว ไม่ได้แพงเพิ่ม)
-   *  usePolling จัดการหยุด/เริ่มตอนสลับแท็บและดึงค่าล่าสุดทันทีตอนกลับมาให้เองอยู่แล้ว (ดู usePolling.ts) */
-  usePolling(() => {
-    if (!dataLoaded) return
-    getAccessTokenSilently()
-      .then(token =>
-        Promise.all([
-          api.settings(token),
-          api.bookings(token),
-          api.bookingsAvailability(token),
-          api.packages(token),
-          api.menus(token),
-        ])
-      )
-      .then(([freshSettings, freshBookings, freshAvailability, freshPackages, freshMenus]) => {
-        setSettings(prev => (JSON.stringify(prev) === JSON.stringify(freshSettings) ? prev : freshSettings))
-        setBookings(prev => (JSON.stringify(prev) === JSON.stringify(freshBookings) ? prev : freshBookings))
-        setAvailability(prev =>
-          JSON.stringify(prev) === JSON.stringify(freshAvailability) ? prev : freshAvailability
-        )
-        setPackages(prev => (JSON.stringify(prev) === JSON.stringify(freshPackages) ? prev : freshPackages))
-        setMenus(prev => (JSON.stringify(prev) === JSON.stringify(freshMenus) ? prev : freshMenus))
-      })
-      .catch(() => {
-        // เงียบไว้ — ไม่ใช่รายการที่ผู้ใช้กดเอง ไม่ต้องเด้ง error banner รบกวน แค่ลองใหม่รอบถัดไป
-      })
-  }, POLL_MS)
-
   const withToken = () => getAccessTokenSilently()
+
+  /** ดึงข้อมูลแต่ละกลุ่มใหม่ — เทียบ JSON ก่อน setState กัน re-render เปล่าๆ ใช้ร่วมกันทั้ง SSE (สัญญาณทันที) และ poll สำรอง */
+  const keepIfSame = <T,>(prev: T, next: T) => (JSON.stringify(prev) === JSON.stringify(next) ? prev : next)
+  const refetchBookings = () =>
+    withToken()
+      .then(token => api.bookings(token))
+      .then(fresh => setBookings(prev => keepIfSame(prev, fresh)))
+      .catch(() => {})
+  const refetchSettings = () =>
+    withToken()
+      .then(token => api.settings(token))
+      .then(fresh => setSettings(prev => keepIfSame(prev, fresh)))
+      .catch(() => {})
+  const refetchCatalog = () =>
+    withToken()
+      .then(token => Promise.all([api.bookingsAvailability(token), api.packages(token), api.menus(token)]))
+      .then(([avail, pkgs, mns]) => {
+        setAvailability(prev => keepIfSame(prev, avail))
+        setPackages(prev => keepIfSame(prev, pkgs))
+        setMenus(prev => keepIfSame(prev, mns))
+      })
+      .catch(() => {})
+
+  const streamsReady = isAuthenticated && dataLoaded
+  // SSE — backend ยิงสัญญาณทันทีที่มีการเปลี่ยนแปลง ให้ refetch เฉพาะส่วนที่เกี่ยวข้องเลย ไม่ต้องรอ poll
+  useBookingsStream(streamsReady, withToken, refetchBookings)
+  useAppStream(streamsReady, withToken, topic => {
+    if (topic === 'settings') refetchSettings()
+    else refetchCatalog()
+  })
+
+  // poll สำรองกรณี SSE ต่อไม่ติด (proxy บางตัวไม่รองรับ event stream) — ปล่อยห่างกว่าเดิมเพราะปกติ SSE ทำงานอยู่แล้ว
+  usePolling(() => {
+    if (!streamsReady) return
+    refetchBookings()
+    refetchSettings()
+    refetchCatalog()
+  }, POLL_MS)
 
   /** อัปโหลดรูป (data URL ที่ย่อแล้วจาก pickImageAsDataUrl) ไปเก็บเป็นไฟล์บน backend — คืน URL สั้นๆ
    *  ไม่ห่อด้วย runAction เพราะหน้าที่เรียก (Menus/Settings/BookingHistory) จัดการ error เองแบบ inline ใกล้ปุ่มอัปโหลดอยู่แล้ว
@@ -689,6 +698,7 @@ export default function App() {
       )}
       {effectiveScreen === 'select-location' && (
         <SelectLocation
+          onResolveMapsLink={url => withToken().then(token => api.resolveMapsLink(token, url))}
           navigate={navigate}
           user={user}
           notifCount={notifCount}

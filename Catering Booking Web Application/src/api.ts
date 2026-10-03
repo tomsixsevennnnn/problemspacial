@@ -13,6 +13,13 @@ export const resolveAssetUrl = (path: string | null | undefined): string => {
   return path
 }
 
+/** EventSource ตั้ง Authorization header เองไม่ได้ จึงส่ง token ผ่าน query string (backend รับทั้งสองทาง) */
+export const bookingsStreamUrl = (token: string) =>
+  `${API_BASE}/realtime/bookings?access_token=${encodeURIComponent(token)}`
+
+export const appStreamUrl = (token: string) =>
+  `${API_BASE}/realtime/app?access_token=${encodeURIComponent(token)}`
+
 async function request<T>(token: string, path: string, init: RequestInit = {}): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
     ...init,
@@ -301,6 +308,10 @@ export const api = {
     request<Package[]>(token, '/packages/reorder', { method: 'PATCH', body: JSON.stringify({ ids }) }),
 
   menus: (token: string) => request<MenuItem[]>(token, '/menus'),
+
+  /** ตามลิงก์ย่อ Google Maps ฝั่งเซิร์ฟเวอร์ (browser ยิงตรงไม่ได้เพราะ Google ไม่เปิด CORS) — คืน URL ปลายทางที่ตามแล้ว */
+  resolveMapsLink: async (token: string, url: string): Promise<string> =>
+    (await request<{ url: string }>(token, `/geo/resolve-maps-link?url=${encodeURIComponent(url)}`)).url,
 
   createMenu: (token: string, input: Omit<MenuItem, 'id'>) =>
     request<MenuItem>(token, '/menus', { method: 'POST', body: JSON.stringify(input) }),

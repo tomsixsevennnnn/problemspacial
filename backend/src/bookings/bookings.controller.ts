@@ -3,6 +3,7 @@ import { BookingStatus, Role } from '@prisma/client'
 import { Throttle } from '@nestjs/throttler'
 import { AUTH0_ROLE_CLAIM } from '../auth/auth.constants'
 import { CurrentUser } from '../auth/current-user.decorator'
+import { RealtimeTopic } from '../realtime/realtime-topic.decorator'
 import { JwtAuthGuard } from '../auth/jwt-auth.guard'
 import { Roles } from '../auth/roles.decorator'
 import { RolesGuard } from '../auth/roles.guard'
@@ -13,6 +14,7 @@ import { UpdateBookingDto } from './dto/update-booking.dto'
 import { UpdatePaymentSlipDto } from './dto/update-payment-slip.dto'
 
 @UseGuards(JwtAuthGuard, RolesGuard)
+@RealtimeTopic('bookings')
 @Controller('bookings')
 export class BookingsController {
   constructor(

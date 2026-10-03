@@ -110,6 +110,12 @@ export default function Orders({
   // หรือแก้จากอีกแท็บ) โดยไม่ต้องสลับหน้าไปมาเอง — ก่อนหน้านี้ตารางโหลดแค่ตอน mount/เปลี่ยนหน้า/ค้นหาเท่านั้น
   usePolling(() => loadPage({ silent: true }), POLL_MS)
 
+  // bookings เปลี่ยนจาก SSE (App.tsx) ให้โหลดหน้านี้ใหม่ทันที แทนที่จะรอ poll รอบถัดไป
+  useEffect(() => {
+    loadPage({ silent: true })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bookings])
+
   // เอา bookings (ชุดเต็มจาก App.tsx) มาทับแถวใน pageData ถ้ามี — onUpdateBooking ใน App.tsx ทำ optimistic update
   // + rollback ให้ bookings ถูกต้องอยู่แล้ว (ดูคอมเมนต์ที่ handleUpdateBooking) เอามาสะท้อนใส่ตารางตรงนี้แทนที่จะ
   // patch pageData เองแยกต่างหาก กันเคส API พังแล้วแถวในตารางค้างค่า optimistic ที่ผิดไว้ไม่มี rollback

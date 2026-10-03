@@ -1,20 +1,23 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards } from '@nestjs/common'
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common'
 import { CurrentUser } from '../auth/current-user.decorator'
+import { RealtimeTopic } from '../realtime/realtime-topic.decorator'
 import { JwtAuthGuard } from '../auth/jwt-auth.guard'
 import { Roles } from '../auth/roles.decorator'
 import { RolesGuard } from '../auth/roles.guard'
 import { CreateMenuItemDto } from './dto/create-menu-item.dto'
+import { ListMenusQueryDto } from './dto/list-menus-query.dto'
 import { UpdateMenuItemDto } from './dto/update-menu-item.dto'
 import { MenusService } from './menus.service'
 
 @UseGuards(JwtAuthGuard, RolesGuard)
+@RealtimeTopic('catalog')
 @Controller('menus')
 export class MenusController {
   constructor(private menus: MenusService) {}
 
   @Get()
-  findAll() {
-    return this.menus.findAll()
+  findAll(@Query() query: ListMenusQueryDto) {
+    return this.menus.findAll(query)
   }
 
   @Post()

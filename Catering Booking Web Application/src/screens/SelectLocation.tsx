@@ -6,6 +6,9 @@ import type { EventLocation, LocationDetail, Screen, ShopLocation, UserProfile }
 import {
   HOME_PROVINCE,
   PRESET_LOCATIONS,
+  isGoogleMapsShortLink,
+  isGoogleMapsUrl,
+  parseGoogleMapsUrl,
   ZONE_LABEL,
   checkDelivery,
   emptyDetail,
@@ -25,6 +28,8 @@ interface SelectLocationProps {
   tables: number
   location: EventLocation | null
   onSetLocation: (loc: EventLocation) => void
+  /** ตามลิงก์ย่อ Google Maps ผ่าน backend (ดู api.resolveMapsLink) */
+  onResolveMapsLink: (url: string) => Promise<string>
   deliveryFee: number
   freeDeliveryMinTables: number
   shopLocation: ShopLocation
@@ -55,6 +60,7 @@ export default function SelectLocation({
   tables,
   location,
   onSetLocation,
+  onResolveMapsLink,
   deliveryFee,
   freeDeliveryMinTables,
   shopLocation,
@@ -87,6 +93,35 @@ export default function SelectLocation({
       setSearching(false)
       return
     }
+    // วางลิงก์ Google Maps มาได้เลย — แกะพิกัดจากลิงก์แม่นกว่าให้ Nominatim ค้นชื่อภาษาไทย (ดูคอมเมนต์ใน geo.ts)
+    if (isGoogleMapsUrl(q)) {
+      let cancelled = false
+      setSearching(true)
+      setNotice(null)
+      ;(async () => {
+        try {
+          const fullUrl = isGoogleMapsShortLink(q) ? await onResolveMapsLink(q) : q
+          const coords = parseGoogleMapsUrl(fullUrl)
+          if (cancelled) return
+          if (!coords) {
+            setNotice('อ่านพิกัดจากลิงก์นี้ไม่ได้ — ลองคัดลอกลิงก์ใหม่จาก Google Maps หรือปักหมุดเอง')
+            return
+          }
+          setSearch('')
+          setResults([])
+          applyPin(coords.lat, coords.lng)
+          setFocusKey(k => k + 1)
+        } catch {
+          if (!cancelled) setNotice('เปิดลิงก์นี้ไม่ได้ — ลองคัดลอกลิงก์ใหม่จาก Google Maps หรือปักหมุดเอง')
+        } finally {
+          if (!cancelled) setSearching(false)
+        }
+      })()
+      return () => {
+        cancelled = true
+      }
+    }
+
     const ctrl = new AbortController()
     const timer = setTimeout(() => {
       setSearching(true)
@@ -236,7 +271,7 @@ export default function SelectLocation({
               <Search size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
               <input
                 type="text"
-                placeholder="ค้นหาจากชื่อสถานที่หรือที่อยู่..."
+                placeholder="ค้นหาชื่อสถานที่/ที่อยู่ หรือวางลิงก์ Google Maps..."
                 value={search}
                 onChange={e => {
                   setSearch(e.target.value)

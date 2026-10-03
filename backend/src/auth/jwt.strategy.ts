@@ -9,7 +9,10 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   constructor() {
     const domain = process.env.AUTH0_DOMAIN
     super({
-      jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
+      jwtFromRequest: ExtractJwt.fromExtractors([
+        ExtractJwt.fromAuthHeaderAsBearerToken(),
+        ExtractJwt.fromUrlQueryParameter('access_token'),
+      ]),
       audience: process.env.AUTH0_AUDIENCE,
       issuer: `https://${domain}/`,
       algorithms: ['RS256'],

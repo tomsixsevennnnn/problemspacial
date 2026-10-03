@@ -2,6 +2,8 @@ import { Injectable, NotFoundException } from '@nestjs/common'
 import { Prisma, type Package, type PackageCourse, type MenuItem } from '@prisma/client'
 import { AuditService } from '../audit/audit.service'
 import { PrismaService } from '../prisma/prisma.service'
+import { ListQueryDto } from '../common/list-query.dto'
+import { Paginated, pageArgsFor } from '../common/pagination'
 import { CourseInput, CreatePackageDto } from './dto/create-package.dto'
 import { UpdateCourseDto } from './dto/update-course.dto'
 import { UpdatePackageDto } from './dto/update-package.dto'
@@ -56,21 +58,35 @@ export class PackagesService {
   private cachedAt = 0
   private readonly CACHE_TTL_MS = 30_000
 
-  async findAll(): Promise<PackageWithCourses[]> {
-    if (this.cached && Date.now() - this.cachedAt < this.CACHE_TTL_MS) return this.cached
-    const packages = await this.prisma.package.findMany({
-      where: { deletedAt: null },
-      orderBy: { sortOrder: 'asc' },
-      include: {
-        courses: {
-          include: { items: { where: { deletedAt: null } } },
-          orderBy: { no: 'asc' },
-        },
+  /** ไม่ส่ง query มาเลย = คืนทั้งชุดจาก cache เหมือนเดิม (reorder ก็ใช้ตัวนี้) — ถ้ามี page/limit/search จะ query
+   *  ตรงจาก DB ไม่แตะ cache เพราะผลที่กรองแล้วไม่ใช่ชุดเต็มที่ cache เก็บไว้ */
+  async findAll(query: ListQueryDto = {}): Promise<PackageWithCourses[] | Paginated<PackageWithCourses>> {
+    const args = pageArgsFor(query.page, query.limit)
+    const where = {
+      deletedAt: null,
+      ...(query.search ? { name: { contains: query.search, mode: 'insensitive' as const } } : {}),
+    }
+    const include = {
+      courses: {
+        include: { items: { where: { deletedAt: null } } },
+        orderBy: { no: 'asc' as const },
       },
-    })
-    this.cached = packages
-    this.cachedAt = Date.now()
-    return packages
+    }
+
+    if (!args && !query.search) {
+      if (this.cached && Date.now() - this.cachedAt < this.CACHE_TTL_MS) return this.cached
+      const packages = await this.prisma.package.findMany({ where, orderBy: { sortOrder: 'asc' }, include })
+      this.cached = packages
+      this.cachedAt = Date.now()
+      return packages
+    }
+
+    if (!args) return this.prisma.package.findMany({ where, orderBy: { sortOrder: 'asc' }, include })
+    const [data, total] = await Promise.all([
+      this.prisma.package.findMany({ where, orderBy: { sortOrder: 'asc' }, include, skip: args.skip, take: args.take }),
+      this.prisma.package.count({ where }),
+    ])
+    return { data, total, page: args.page, limit: args.limit }
   }
 
   /** public เพราะ MenusService ก็ต้องเรียกล้าง cache นี้ด้วย — packages cache ฝัง MenuItem เต็มไว้ในแต่ละ
